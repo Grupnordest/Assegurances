@@ -19,9 +19,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {t.menu.inici}
           </Link>
           {esAdmin(usuari) && (
-            <Link href="/admin/usuaris" className={enllac}>
-              {t.menu.usuaris}
-            </Link>
+            <>
+              <Link href="/admin/estoc" className={enllac}>
+                {t.menu.estoc}
+              </Link>
+              <Link href="/admin/usuaris" className={enllac}>
+                {t.menu.usuaris}
+              </Link>
+            </>
           )}
           <form action="/auth/sortir" method="post" className="ml-auto">
             <button type="submit" className={enllac}>

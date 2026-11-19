@@ -25,6 +25,7 @@ export const t = {
   menu: {
     inici: "Inici",
     usuaris: "Usuaris",
+    estoc: "Estoc",
     sortir: "Surt",
   },
   inici: {
@@ -80,5 +81,47 @@ export const t = {
       propiCorreu: "No pots canviar el teu propi correu: perdries l'accés.",
     },
     desat: "Desat.",
+  },
+  estoc: {
+    titol: "Estoc",
+    ultima: "Estoc vigent",
+    cap: "Encara no s'ha carregat cap estoc.",
+    dataEstoc: "Data de l'estoc",
+    vehicles: "Vehicles",
+    descartats: "Files descartades",
+    carregatPer: "Carregat per",
+    carregatEl: "Carregat el",
+    antic: (dies: number) =>
+      `L'estoc té ${dies} dies laborables. Exporta'l de Spiga i torna'l a carregar.`,
+    pujar: {
+      titol: "Carrega un estoc nou",
+      ajuda: "Excel \"Stock VO\" exportat de Spiga (.xls o .xlsx).",
+      boto: "Carrega",
+      carregant: "Carregant…",
+      confirma: "Sí, substitueix l'estoc",
+      cancela: "Cancel·la",
+      caiguda: (abans: number, ara: number) =>
+        `Aquest fitxer té ${ara} vehicles i l'estoc vigent en té ${abans}. Pot ser un fitxer equivocat o exportat amb un filtre. Vols substituir l'estoc igualment?`,
+      ok: (n: number) => `Estoc carregat: ${n} vehicles.`,
+      okDescartats: (n: number) => `S'han descartat ${n} files sense matrícula vàlida o repetides.`,
+      okSenseData: "No s'ha trobat la data a l'Excel: s'ha fet servir l'hora de la càrrega.",
+    },
+    errors: {
+      permis: "No tens permís per fer aquesta acció.",
+      senseFitxer: "Tria un fitxer.",
+      mida: "El fitxer és massa gran (màxim 4 MB).",
+      tipus: "El fitxer ha de ser un Excel (.xls o .xlsx).",
+      illegible: "No s'ha pogut llegir el fitxer. Comprova que és l'Excel de Spiga.",
+      format: (falten: string[]) => `Al fitxer li falten aquestes columnes: ${falten.join(", ")}.`,
+      buit: "El fitxer no té cap vehicle.",
+      generic: "No s'ha pogut carregar l'estoc. Torna-ho a provar.",
+    },
+    cerca: {
+      etiqueta: "Busca per matrícula",
+      boto: "Busca",
+      capResultat: (q: string) => `${q} no és a l'estoc.`,
+      massa: "Hi ha més de 50 resultats: afina la cerca.",
+      columnes: { matricula: "Matrícula", marca: "Marca", model: "Model", color: "Color", dies: "Dies en estoc" },
+    },
   },
 };
