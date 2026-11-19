@@ -1,5 +1,5 @@
 -- Estoc de vehicles a nom de l'empresa (PRD §5.2, FR-3)
--- Cada pujada és una càrrega; l'Estoc vigent és l'última.
+-- Cada pujada és una càrrega; només es guarda l'última (decisió del client).
 
 create table public.estoc_carregues (
   id uuid primary key default gen_random_uuid(),
@@ -65,6 +65,9 @@ begin
   select v_id, x.matricula, x.vin, x.marca, x.model, x.color, x.dies_estoc
   from jsonb_to_recordset(p_vehicles)
     as x(matricula text, vin text, marca text, model text, color text, dies_estoc integer);
+
+  -- Només es conserva l'última càrrega: s'esborren les anteriors (i els seus vehicles, en cascada).
+  delete from public.estoc_carregues where id <> v_id;
 
   return v_id;
 end $$;
