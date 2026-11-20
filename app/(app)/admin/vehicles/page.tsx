@@ -7,6 +7,9 @@ import FilaVehicle, { type VehicleFila } from "./fila-vehicle";
 import FormulariLlistat from "./formulari-llistat";
 import type { FilaDescartada } from "@/lib/flota/llegeix-llistat";
 import { textDescartades } from "./regles";
+import FormulariRelacio from "./formulari-relacio";
+import { avuiMadrid } from "@/lib/dies-laborables";
+import { dataCurta } from "@/lib/correu/plantilles";
 
 type Fila = VehicleFila & { responsable_nom: string | null };
 type Carrega = {
@@ -18,8 +21,17 @@ type Carrega = {
 
 const dataHora = new Intl.DateTimeFormat("ca-ES", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Madrid" });
 
-/** Data d'avui a Madrid ("YYYY-MM-DD"). */
-const avuiMadrid = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date());
+// L'enviament del correu (Graph) pot trigar: les Server Actions d'aquesta pàgina tenen fins a 60 s.
+export const maxDuration = 60;
+
+type BaixaEnCurs = {
+  id: string;
+  vehicle_id: string;
+  estat: "enviant" | "enviada" | "anullant";
+  data_baixa: string;
+  extorn_esperat: number | null;
+  updated_at: string;
+};
 
 export default async function VehiclesPage({ searchParams }: { searchParams: Promise<{ veure?: string }> }) {
   if (!esAdmin(await exigeixUsuariActiu())) redirect("/");
@@ -57,8 +69,13 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const [{ data: usuaris, error: errU }, { data: centres, error: errC }, { data: cap, error: errCap }] =
-    await Promise.all([
+  const [
+    { data: usuaris, error: errU },
+    { data: centres, error: errC },
+    { data: cap, error: errCap },
+    { data: relacio, error: errR },
+    { data: baixes, error: errB },
+  ] = await Promise.all([
       supabase.from("usuaris").select("id, nom").eq("actiu", true).order("nom").returns<{ id: string; nom: string }[]>(),
       supabase.from("centres").select("id, nom").order("id").returns<{ id: number; nom: string }[]>(),
       supabase
@@ -69,10 +86,38 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
         .order("nom")
         .limit(1)
         .maybeSingle<{ nom: string }>(),
+      supabase
+        .from("relacio_flota_vigent")
+        .select("data_relacio, matricules")
+        .maybeSingle<{ data_relacio: string; matricules: string[] }>(),
+      supabase
+        .from("baixes")
+        .select("id, vehicle_id, estat, data_baixa, extorn_esperat, updated_at")
+        .in("estat", ["enviant", "enviada", "anullant"])
+        .returns<BaixaEnCurs[]>(),
     ]);
   if (errU) throw errU;
   if (errC) throw errC;
   if (errCap) throw errCap;
+  if (errR) throw errR;
+  if (errB) throw errB;
+
+  const avui = avuiMadrid();
+  const aRelacio = new Set(relacio?.matricules ?? []);
+  const relacioData = relacio ? dataCurta(relacio.data_relacio) : null;
+  const fa2min = Date.now() - 2 * 60_000;
+  const baixaDe = new Map(
+    baixes.map((b) => [
+      b.vehicle_id,
+      {
+        id: b.id,
+        estat: b.estat,
+        data_baixa: b.data_baixa,
+        extorn_esperat: b.extorn_esperat === null ? null : Number(b.extorn_esperat),
+        recent: new Date(b.updated_at).getTime() > fa2min,
+      },
+    ]),
+  );
 
   const pendents = vehicles.filter((v) => v.pendent).length;
   const mostrats = tots ? vehicles : vehicles.filter((v) => v.pendent);
@@ -92,6 +137,8 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
         </p>
         {carrega.descartades.length > 0 && <p className="text-amber-900">{textDescartades(carrega.descartades)}</p>}
       </div>
+
+      <FormulariRelacio vigent={relacio ? tv.relacio.vigent(relacioData!, relacio.matricules.length) : null} />
 
       <nav className="flex flex-wrap gap-2">
         <Link href="/admin/vehicles" className={pestanya(!tots)}>
@@ -113,7 +160,9 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
               usuaris={usuaris}
               centres={centres}
               capPostvenda={cap?.nom ?? null}
-              avui={avuiMadrid()}
+              avui={avui}
+              baixa={baixaDe.get(v.id) ?? null}
+              relacioData={aRelacio.has(v.matricula) ? relacioData : null}
             />
           ))}
         </ul>

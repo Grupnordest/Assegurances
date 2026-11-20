@@ -31,3 +31,8 @@ export function diesLaborablesDes(des: Date, ara: Date): number {
 
 /** L'estoc és antic si fa més de 3 dies laborables (PRD FR-3). */
 export const MAX_DIES_ESTOC = 3;
+
+/** Data d'avui a Madrid ("YYYY-MM-DD"). */
+export function avuiMadrid(ara: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: ZONA }).format(ara);
+}

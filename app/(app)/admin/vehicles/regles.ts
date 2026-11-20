@@ -4,6 +4,8 @@ import { t } from "@/lib/textos";
 
 /** Per sota del límit de les Server Actions (5 MB a next.config.ts). */
 export const MIDA_MAXIMA = 4 * 1024 * 1024;
+/** PDF adjunts: el base64 hi suma un 33 % i Graph accepta com a molt ~4 MB per petició. */
+export const MIDA_PDF = 2.5 * 1024 * 1024;
 export const MOTIUS = ["vs", "prova", "client", "demo"] as const;
 
 const e = t.vehicles.errors;
@@ -58,5 +60,30 @@ export function missatgeErrorVehicles(error: { code?: string; message?: string }
   if (m.includes("data_passada")) return e.dataPassada;
   if (m.includes("no_trobat")) return e.noTrobat;
   if (m.includes("sense_vehicles")) return e.buit;
+  if (m.includes("ja_baixa")) return e.jaBaixa;
+  if (m.includes("estat_baixa")) return e.estatBaixa;
+  if (m.includes("sense_baixa")) return e.senseBaixa;
+  if (m.includes("massa_tard")) return e.massaTard;
+  if (m.includes("pendent_confirmar")) return e.pendentConfirmar;
+  if (error.code === "23505") return e.jaBaixa;
   return e.generic;
+}
+
+export const baixaSchema = z.object({
+  id: z.string().uuid(e.noTrobat),
+  dataBaixa: z.string().refine(esDataReal, e.dataBaixa),
+});
+
+export const anullacioSchema = z.object({ id: z.string().uuid(e.noTrobat) });
+
+export const resolucioSchema = z.object({
+  id: z.string().uuid(e.noTrobat),
+  tipus: z.enum(["baixa", "anullacio"]),
+  resultat: z.enum(["enviat", "no_enviat"]),
+});
+
+export function missatgeErrorRelacio(error: "sense-data" | "sense-matricules" | "illegible"): string {
+  if (error === "sense-data") return e.relacioSenseData;
+  if (error === "sense-matricules") return e.relacioSenseMatricules;
+  return e.relacioIllegible;
 }
