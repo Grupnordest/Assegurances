@@ -19,7 +19,7 @@ export default function FormulariRelacio({ vigent }: { vigent: string | null }) 
           type="file"
           name="fitxer"
           required
-          accept="application/pdf,.pdf"
+          accept="application/pdf,.pdf,.xlsx,.xls"
           onChange={(ev) => setMassaGran((ev.target.files?.[0]?.size ?? 0) > MIDA_PDF)}
           className="min-w-0 max-w-full text-sm"
           aria-label={r.ajuda}

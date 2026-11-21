@@ -78,9 +78,10 @@ export const t = {
     },
     relacio: {
       titol: "Relació de Flota VO",
-      vigent: (data: string, n: number) => `Relació d'AXA del ${data} · ${n} matrícules`,
+      vigent: (data: string, n: number) => `Relació vigent del ${data} · ${n} matrícules`,
       cap: "Encara no s'ha pujat cap Relació de Flota VO. Sense relació, cada baixa demanarà el justificant.",
-      ajuda: "Puja el PDF d'AXA \"Relación de vehículos asegurados\". Es fa servir l'última que es puja.",
+      ajuda:
+        "Puja el PDF d'AXA \"Relación de vehículos asegurados\" o l'Excel de Proassa (amb la data al nom del fitxer). Es fa servir la de data més recent.",
       boto: "Puja la relació",
       carregant: "Llegint…",
       ok: (data: string, n: number) => `Relació del ${data} carregada: ${n} matrícules.`,
@@ -128,10 +129,12 @@ export const t = {
       dades: "Revisa les dades del formulari.",
       generic: "No s'ha pogut desar. Torna-ho a provar.",
       pdf: "El fitxer ha de ser un PDF.",
-      pdfMida: "El PDF és massa gran (màxim 2,5 MB).",
-      relacioIllegible: "No s'ha pogut llegir el PDF. Comprova que és la relació d'AXA.",
-      relacioSenseData: "No s'ha trobat la data (\"asegurados a dd/mm/aaaa\"). Comprova que és la relació d'AXA.",
-      relacioSenseMatricules: "El PDF no té cap matrícula.",
+      pdfMida: "El fitxer és massa gran (màxim 2,5 MB).",
+      relacioTipus: "La relació ha de ser el PDF d'AXA o l'Excel de Proassa.",
+      relacioIllegible: "No s'ha pogut llegir el fitxer. Comprova que és la relació d'AXA o de Proassa.",
+      relacioSenseData:
+        "No s'ha trobat la data. Al PDF d'AXA ha de dir \"asegurados a dd/mm/aaaa\"; a l'Excel, posa la data al nom del fitxer (p. ex. 2026-11-18).",
+      relacioSenseMatricules: "El fitxer no té cap matrícula.",
       dataBaixa: "Tria una data de baixa d'avui o posterior.",
       justificant:
         "La matrícula no surt a la Relació de Flota VO: adjunta el justificant del nou titular (PDF). Si no et surt el camp, recarrega la pàgina.",

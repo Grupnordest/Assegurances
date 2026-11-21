@@ -6,8 +6,8 @@ import { correuAnullacio, correuBaixa, dataCurta } from "@/lib/correu/plantilles
 import { avuiMadrid } from "@/lib/dies-laborables";
 import { descarregaPdf, esborraPdf, pujaPdf } from "@/lib/documents";
 import { extornEsperat } from "@/lib/extorns/calcula";
-import { llegeixRelacioPdf } from "@/lib/flota/llegeix-relacio";
-import { esPdf } from "@/lib/pdf";
+import { llegeixRelacioExcel, llegeixRelacioPdf } from "@/lib/flota/llegeix-relacio";
+import { esPdf, MIME, tipusDocument, type TipusDocument } from "@/lib/pdf";
 import { createClient } from "@/lib/supabase/server";
 import { t } from "@/lib/textos";
 import { esAdmin, obtenirUsuariActual } from "@/lib/usuari-actual";
@@ -45,21 +45,23 @@ async function revertir(supabase: Supabase, fn: string, args: Record<string, unk
   }
 }
 
-/** Puja la Relació de Flota VO d'AXA (PDF). La vigent és la de data d'AXA més recent. */
+/** Puja la Relació de Flota VO (PDF d'AXA o Excel de Proassa). La vigent és la de data d'AXA més recent. */
 export async function carregaRelacio(_prev: EstatAccio, formData: FormData): Promise<EstatAccio> {
   if (!esAdmin(await obtenirUsuariActual())) return { error: e.permis };
 
   const fitxer = formData.get("fitxer");
-  const pdf = await pdfDelFormulari(fitxer);
-  if (pdf === null) return { error: e.senseFitxer };
-  if (typeof pdf === "string") return { error: pdf };
+  if (!(fitxer instanceof File) || fitxer.size === 0) return { error: e.senseFitxer };
+  if (fitxer.size > MIDA_PDF) return { error: e.pdfMida };
+  const bytes = new Uint8Array(await fitxer.arrayBuffer());
+  const tipus = tipusDocument(bytes);
+  if (!tipus) return { error: e.relacioTipus };
 
-  const lectura = await llegeixRelacioPdf(pdf);
+  const lectura = tipus === "pdf" ? await llegeixRelacioPdf(bytes) : llegeixRelacioExcel(bytes, fitxer.name);
   if (!lectura.ok) return { error: missatgeErrorRelacio(lectura.error) };
 
-  const path = `relacions/${crypto.randomUUID()}.pdf`;
+  const path = `relacions/${crypto.randomUUID()}.${tipus}`;
   try {
-    await pujaPdf(path, pdf);
+    await pujaPdf(path, bytes, MIME[tipus]);
   } catch (err) {
     console.error("Error pujant la relació", err);
     return { error: e.document };
@@ -69,7 +71,7 @@ export async function carregaRelacio(_prev: EstatAccio, formData: FormData): Pro
     const { error } = await supabase.rpc("registra_relacio", {
       p_data: lectura.data,
       p_fitxer: path,
-      p_nom_fitxer: (fitxer as File).name,
+      p_nom_fitxer: fitxer.name,
       p_matricules: lectura.matricules,
     });
     if (error) {
@@ -127,10 +129,11 @@ export async function donaDeBaixa(_prev: EstatAccio, formData: FormData): Promis
     const ambRelacio = !!relacio && relacio.matricules.includes(vehicle.matricula);
     let adjunt: Adjunt;
     if (ambRelacio) {
+      const ext = (relacio!.fitxer.split(".").pop() ?? "pdf") as TipusDocument;
       adjunt = {
-        nom: `Relacio Flota VO ${dataCurta(relacio!.data_relacio).replaceAll("/", "-")}.pdf`,
+        nom: `Relacio Flota VO ${dataCurta(relacio!.data_relacio).replaceAll("/", "-")}.${ext}`,
         contingut: await descarregaPdf(relacio!.fitxer),
-        tipus: "application/pdf",
+        tipus: MIME[ext] ?? MIME.pdf,
       };
     } else {
       const pdf = await pdfDelFormulari(formData.get("justificant"));

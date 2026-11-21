@@ -4,11 +4,11 @@ import { createAdminClient } from "./supabase/admin";
 /** Bucket privat de Supabase Storage per a relacions d'AXA i justificants. */
 const BUCKET = "documents";
 
-/** Puja un PDF. Només el servidor (clau de servei); qui crida ja ha comprovat que és admin. */
-export async function pujaPdf(path: string, contingut: Uint8Array): Promise<void> {
+/** Puja un document (PDF per defecte). Només el servidor (clau de servei); qui crida ja ha comprovat que és admin. */
+export async function pujaPdf(path: string, contingut: Uint8Array, contentType = "application/pdf"): Promise<void> {
   const { error } = await createAdminClient()
     .storage.from(BUCKET)
-    .upload(path, contingut, { contentType: "application/pdf", upsert: true });
+    .upload(path, contingut, { contentType, upsert: true });
   if (error) throw error;
 }
 
