@@ -60,6 +60,14 @@ export default function FilaVehicle({ vehicle: v, usuaris, centres, capPostvenda
   const [dataPrevista, setDataPrevista] = useState(v.data_prevista_baixa ?? "");
   // Una data ja passada que no es toca s'ha de poder tornar a enviar.
   const minData = v.data_prevista_baixa && v.data_prevista_baixa < avui ? v.data_prevista_baixa : avui;
+  // Per què continua Pendent (segons el que hi ha desat), perquè "Desat" no sembli que no ha fet res.
+  const perQue = !v.pendent
+    ? null
+    : !v.motiu
+      ? tv.perQuePendent.motiu
+      : v.motiu === "vs"
+        ? tv.perQuePendent.cap
+        : tv.perQuePendent.responsable;
 
   return (
     <li className="space-y-3 p-4">
@@ -68,6 +76,7 @@ export default function FilaVehicle({ vehicle: v, usuaris, centres, capPostvenda
         <span className="text-sm text-gray-700">{v.marca_model ?? "—"}</span>
         <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{tv.estats[v.estat]}</span>
         {v.pendent && <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">{tv.pendents}</span>}
+        {perQue && v.motiu && <span className="text-xs text-amber-900">{perQue}</span>}
       </div>
       <p className="text-sm text-gray-600">
         {tv.cobertura(v.cobertura, v.franquicia)} · {tv.camps.dataAlta}: {data(v.data_alta)} · {tv.camps.prima}:{" "}

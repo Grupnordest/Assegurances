@@ -62,6 +62,11 @@ export const t = {
     capPostvenda: (nom: string | null) => (nom ? `${nom} (Cap de postvenda)` : "Sense Cap de postvenda"),
     desa: "Desa",
     desat: "Desat",
+    perQuePendent: {
+      motiu: "Falta triar el Motiu.",
+      cap: "És VS i no hi ha cap Cap de postvenda: crea'l a Usuaris.",
+      responsable: "Falta el Responsable (ha d'estar actiu a Usuaris).",
+    },
     carrega: {
       titol: "Càrrega inicial",
       ajuda: "Puja el Llistat de flota de la corredoria (\"Datos de la Flota BIFR0192\", .xlsx). Només es pot fer una vegada.",
