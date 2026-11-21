@@ -6,7 +6,7 @@ import { t } from "@/lib/textos";
 export const MIDA_MAXIMA = 4 * 1024 * 1024;
 /** PDF adjunts: el base64 hi suma un 33 % i Graph accepta com a molt ~4 MB per petició. */
 export const MIDA_PDF = 2.5 * 1024 * 1024;
-export const MOTIUS = ["vs", "prova", "client", "demo"] as const;
+export const MOTIUS = ["vs", "prova", "client", "demo", "familia"] as const;
 
 const e = t.vehicles.errors;
 const buitANull = (v: unknown) => (v === "" || v === undefined || v === null ? null : v);
