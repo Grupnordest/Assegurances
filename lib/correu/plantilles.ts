@@ -64,3 +64,79 @@ export function correuEstocProassa(p: {
     ].join("\n"),
   };
 }
+
+/** Correu d'alta a la Corredoria (FR-8), en el format que envia avui Administració. */
+export function correuAlta(p: {
+  matricula: string;
+  marcaModel: string | null;
+  color: string | null;
+  vin: string | null;
+  cobertura: "tot_risc" | "tercers";
+  dataAlta: string;
+}): Correu {
+  return {
+    assumpte: `Alta flota tot risc – ${p.matricula}`,
+    cos: [
+      "Bon dia,",
+      "",
+      `Sol·licitem una alta a la flota ${p.cobertura === "tot_risc" ? "tot risc + fq 300 €" : "a tercers"}`,
+      (p.marcaModel ?? "").toUpperCase(),
+      (p.color ?? "").toUpperCase(),
+      `Matrícula: ${p.matricula} · Data d'alta: ${dataCurta(p.dataAlta)}`,
+      ...(p.vin ? [`Bastidor: ${p.vin}`] : []),
+      "Adjunto documentació.",
+      "",
+      "Gràcies",
+    ]
+      .filter((l, i, a) => l !== "" || a[i - 1] !== "")
+      .join("\n"),
+  };
+}
+
+/** Avís als Validadors: hi ha una Sol·licitud d'alta per validar. */
+export function avisSollicitudAlta(p: {
+  matricula: string;
+  marcaModel: string | null;
+  motiu: string;
+  sollicitant: string;
+  dataAlta: string;
+  enllac: string;
+}): Correu {
+  return {
+    assumpte: `Alta per validar – ${p.matricula}`,
+    cos: [
+      "Hola,",
+      "",
+      `${p.sollicitant} demana assegurar el ${p.matricula}${p.marcaModel ? ` (${p.marcaModel})` : ""} a partir del ${dataCurta(p.dataAlta)}.`,
+      `Motiu: ${p.motiu}.`,
+      "",
+      `Valida-la o rebutja-la aquí: ${p.enllac}`,
+      "",
+      "Control d'assegurances",
+    ].join("\n"),
+  };
+}
+
+/** Avís al Sol·licitant: la seva Sol·licitud d'alta s'ha validat o rebutjat. */
+export function avisResolucioAlta(p: {
+  matricula: string;
+  validada: boolean;
+  qui: string;
+  motiuRebuig?: string | null;
+  enllac: string;
+}): Correu {
+  return {
+    assumpte: `${p.validada ? "Alta validada" : "Alta rebutjada"} – ${p.matricula}`,
+    cos: [
+      "Hola,",
+      "",
+      p.validada
+        ? `${p.qui} ha validat l'alta del ${p.matricula}. S'ha enviat a la corredoria; quan arribi la pòlissa, el vehicle quedarà assegurat.`
+        : `${p.qui} ha rebutjat l'alta del ${p.matricula}. Motiu: ${p.motiuRebuig ?? "—"}.`,
+      "",
+      `Les teves sol·licituds: ${p.enllac}`,
+      "",
+      "Control d'assegurances",
+    ].join("\n"),
+  };
+}

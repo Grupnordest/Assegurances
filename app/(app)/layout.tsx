@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { t } from "@/lib/textos";
+import { esValidadorDeQualsevol } from "@/lib/altes/regles";
 import { esAdmin, exigeixUsuariActiu } from "@/lib/usuari-actual";
 
 const enllac = "inline-flex min-h-11 items-center px-2 text-sm text-gray-700 hover:underline";
@@ -18,6 +19,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/" className={enllac}>
             {t.menu.inici}
           </Link>
+          <Link href="/altes" className={enllac}>
+            {t.menu.altes}
+          </Link>
+          {esValidadorDeQualsevol(usuari.rols) && (
+            <Link href="/validar" className={enllac}>
+              {t.menu.validar}
+            </Link>
+          )}
           {esAdmin(usuari) && (
             <>
               <Link href="/admin/vehicles" className={enllac}>

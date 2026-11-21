@@ -70,3 +70,10 @@ export function destinatarisProassa(c: ConfigCorreu): Destinataris | null {
   const to = [...new Set(c.proassa.map((x) => x.toLowerCase()))];
   return { to, cc: [...new Set(c.copiaAdmin.map((x) => x.toLowerCase()))].filter((x) => !to.includes(x)) };
 }
+
+/** Destinataris d'un Avís a usuaris de l'eina. En proves, només l'adreça de proves. */
+export function destinatarisAvis(c: ConfigCorreu, adreces: string[]): Destinataris | null {
+  if (c.proves) return { to: [c.proves], cc: [] };
+  const to = [...new Set(adreces.map((x) => x.trim().toLowerCase()).filter(Boolean))];
+  return to.length ? { to, cc: [] } : null;
+}

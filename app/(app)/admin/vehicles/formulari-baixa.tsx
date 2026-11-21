@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { t } from "@/lib/textos";
-import { anulaBaixa, donaDeBaixa, resolEnviament, type EstatAccio } from "./baixa-actions";
+import { anulaBaixa, donaDeBaixa, marcaAssegurat, resolEnviament, type EstatAccio } from "./baixa-actions";
 import { MIDA_PDF } from "./regles";
 
 const boto = "min-h-11 rounded-md px-4 font-medium disabled:opacity-60";
@@ -116,6 +116,35 @@ export function PendentConfirmar({ baixaId, tipus }: { baixaId: string; tipus: "
         </button>
         {!pendent && estat.error && <span className="text-red-700">{estat.error}</span>}
       </div>
+    </form>
+  );
+}
+
+/** Enviat a la corredoria → Assegurat amb el PDF de la pòlissa. */
+export function FormulariAssegurat({ vehicleId }: { vehicleId: string }) {
+  const [estat, accio, pendent] = useActionState<EstatAccio, FormData>(marcaAssegurat, {});
+  const [massaGran, setMassaGran] = useState(false);
+  const ta = t.vehicles.assegurat;
+  return (
+    <form action={accio} className="space-y-2 rounded-md border border-blue-200 bg-blue-50/40 p-3">
+      <input type="hidden" name="id" value={vehicleId} />
+      <p className="text-sm text-gray-700">{ta.ajuda}</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="file"
+          name="polissa"
+          required
+          accept="application/pdf,.pdf"
+          onChange={(ev) => setMassaGran((ev.target.files?.[0]?.size ?? 0) > MIDA_PDF)}
+          className="min-w-0 max-w-full text-sm"
+        />
+        <button type="submit" disabled={pendent || massaGran} className={`${boto} bg-blue-700 text-white`}>
+          {ta.boto}
+        </button>
+      </div>
+      {massaGran && <p className="text-sm text-red-700">{t.vehicles.errors.pdfMida}</p>}
+      {!pendent && estat.error && <p className="text-sm text-red-700">{estat.error}</p>}
+      {!pendent && estat.ok && <p className="text-sm text-green-800">{estat.ok}</p>}
     </form>
   );
 }

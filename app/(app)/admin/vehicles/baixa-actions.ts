@@ -289,3 +289,31 @@ export async function resolEnviament(_prev: EstatAccio, formData: FormData): Pro
   revalidatePath("/admin/vehicles");
   return { ok: t.vehicles.desat };
 }
+
+/** Enviat a la corredoria → Assegurat, amb el PDF de la pòlissa (fins que hi hagi lectura de bústia, FR-10). */
+export async function marcaAssegurat(_prev: EstatAccio, formData: FormData): Promise<EstatAccio> {
+  if (!esAdmin(await obtenirUsuariActual())) return { error: e.permis };
+  const id = String(formData.get("id") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: e.noTrobat };
+  const pdf = await pdfDelFormulari(formData.get("polissa"));
+  if (pdf === null) return { error: e.polissa };
+  if (typeof pdf === "string") return { error: pdf };
+
+  // Camí únic: una segona pujada (dues pestanyes) no pot trepitjar ni esborrar la pòlissa ja desada.
+  const path = `polisses/${id}-${crypto.randomUUID()}.pdf`;
+  try {
+    await pujaPdf(path, pdf);
+    const supabase = await createClient();
+    const { error } = await supabase.rpc("marca_assegurat", { p_id: id, p_polissa: path });
+    if (error) {
+      console.error("Error marcant assegurat", error);
+      await esborraPdf(path);
+      return { error: error.message?.includes("estat_alta") ? t.vehicles.assegurat.error : missatgeErrorVehicles(error) };
+    }
+  } catch (err) {
+    console.error("Error marcant assegurat", err);
+    return { error: e.generic };
+  }
+  revalidatePath("/admin/vehicles");
+  return { ok: t.vehicles.assegurat.ok };
+}

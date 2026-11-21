@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { destinataris, destinatarisProassa, llegeixConfigCorreu } from "./config";
-import { correuAnullacio, correuBaixa, correuEstocProassa } from "./plantilles";
+import { destinataris, destinatarisAvis, destinatarisProassa, llegeixConfigCorreu } from "./config";
+import { avisResolucioAlta, correuAlta, correuAnullacio, correuBaixa, correuEstocProassa } from "./plantilles";
 
 const ENTORN = {
   AZURE_TENANT_ID: "tenant",
@@ -91,5 +91,42 @@ describe("enviament d'estoc a Proassa", () => {
   it("sense canvis ho diu", () => {
     const c = correuEstocProassa({ data: "2026-11-18", total: 1, altes: [], baixes: [], signatura: "Nuri" });
     expect(c.cos).toContain("Sense canvis");
+  });
+});
+
+describe("circuit d'altes", () => {
+  it("correu d'alta en el format d'Administració", () => {
+    const c = correuAlta({
+      matricula: "1105NPT",
+      marcaModel: "Renault Clio Techno E-Tech",
+      color: "Rojo absoluto",
+      vin: "VF1RJA00012345678",
+      cobertura: "tot_risc",
+      dataAlta: "2026-11-22",
+    });
+    expect(c.assumpte).toBe("Alta flota tot risc – 1105NPT");
+    expect(c.cos).toContain("Sol·licitem una alta a la flota tot risc + fq 300 €");
+    expect(c.cos).toContain("RENAULT CLIO TECHNO E-TECH\nROJO ABSOLUTO");
+    expect(c.cos).toContain("Matrícula: 1105NPT · Data d'alta: 22/11/2026");
+    expect(c.cos).toContain("Adjunto documentació.");
+  });
+
+  it("a tercers canvia la línia de la cobertura", () => {
+    const c = correuAlta({ matricula: "X", marcaModel: null, color: null, vin: null, cobertura: "tercers", dataAlta: "2026-11-22" });
+    expect(c.cos).toContain("Sol·licitem una alta a la flota a tercers");
+  });
+
+  it("avís de rebuig amb el motiu", () => {
+    const c = avisResolucioAlta({ matricula: "X", validada: false, qui: "Jordi", motiuRebuig: "Ja en tenim prou", enllac: "u" });
+    expect(c.assumpte).toBe("Alta rebutjada – X");
+    expect(c.cos).toContain("Motiu: Ja en tenim prou.");
+  });
+
+  it("destinataris dels avisos: en proves només proves; sense adreces → null", () => {
+    const proves = llegeixConfigCorreu({ ...ENTORN, CORREU_PROVES: "jo@example.com" });
+    expect(proves.ok && destinatarisAvis(proves.config, ["a@x.com"])).toEqual({ to: ["jo@example.com"], cc: [] });
+    const real = llegeixConfigCorreu(ENTORN);
+    expect(real.ok && destinatarisAvis(real.config, ["A@x.com", "a@x.com"])).toEqual({ to: ["a@x.com"], cc: [] });
+    expect(real.ok && destinatarisAvis(real.config, [])).toBeNull();
   });
 });

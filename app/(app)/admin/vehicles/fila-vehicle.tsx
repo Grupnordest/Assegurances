@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { t } from "@/lib/textos";
 import { classificaVehicle, type EstatClassificacio } from "./actions";
-import { BotoAnula, FormulariBaixa, PendentConfirmar } from "./formulari-baixa";
+import { BotoAnula, FormulariAssegurat, FormulariBaixa, PendentConfirmar } from "./formulari-baixa";
 import { MOTIUS } from "./regles";
 
 export type VehicleFila = {
@@ -94,6 +94,7 @@ export default function FilaVehicle({ vehicle: v, usuaris, centres, capPostvenda
         ) : (
           <PendentConfirmar baixaId={baixa.id} tipus={baixa.estat === "enviant" ? "baixa" : "anullacio"} />
         ))}
+      {v.estat === "enviat" && <FormulariAssegurat vehicleId={v.id} />}
       {v.estat === "assegurat" && !baixa && (
         <FormulariBaixa vehicleId={v.id} avui={avui} tePolissa={tePolissa} />
       )}
