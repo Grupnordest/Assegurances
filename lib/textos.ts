@@ -35,7 +35,7 @@ export const t = {
     pendents: "Pendents",
     tots: "Tots",
     capPendent: "No hi ha cap vehicle pendent de classificar.",
-    motius: { vs: "VS", prova: "Prova", client: "Client", demo: "DEMO", familia: "Família" },
+    motius: { vs: "VS", prova: "Prova", client: "Client", demo: "DEMO", familia: "Família", personal: "Personal empresa" },
     estats: {
       sollicitat: "Sol·licitat",
       rebutjat: "Rebutjat",
