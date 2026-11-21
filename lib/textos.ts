@@ -90,9 +90,9 @@ export const t = {
       boto: "Donar de baixa",
       titol: "Baixa del vehicle",
       data: "Data de baixa",
-      ambRelacio: (data: string) => `S'hi adjuntarà la Relació de Flota VO del ${data}, on surt la matrícula.`,
-      senseRelacio: "La matrícula no surt a la Relació de Flota VO. Adjunta el justificant del nou titular (PDF).",
-      justificant: "Justificant (PDF)",
+      ambPolissa: "S'hi adjuntarà la pòlissa AXA del vehicle. Si en vols posar una de nova, tria-la aquí:",
+      sensePolissa: "Adjunta la pòlissa AXA del vehicle (PDF). Quedarà desada al vehicle per a la propera vegada.",
+      polissa: "Pòlissa AXA del vehicle (PDF)",
       envia: "Envia la baixa a la corredoria",
       enviant: "Enviant…",
       cancel: "Cancel·la",
@@ -136,8 +136,7 @@ export const t = {
         "No s'ha trobat la data. Al PDF d'AXA ha de dir \"asegurados a dd/mm/aaaa\"; a l'Excel, posa la data al nom del fitxer (p. ex. 2026-11-18).",
       relacioSenseMatricules: "El fitxer no té cap matrícula.",
       dataBaixa: "Tria una data de baixa d'avui o posterior.",
-      justificant:
-        "La matrícula no surt a la Relació de Flota VO: adjunta el justificant del nou titular (PDF). Si no et surt el camp, recarrega la pàgina.",
+      polissa: "Adjunta la pòlissa AXA del vehicle (PDF).",
       pendentConfirmar: "Hi ha un enviament pendent de confirmar per a aquest vehicle. Resol-lo primer.",
       correuIncert:
         "Microsoft no ha respost i no sabem si el correu ha sortit. Mira a Elements enviats d'assegurances@ i indica-ho a la fila del vehicle.",

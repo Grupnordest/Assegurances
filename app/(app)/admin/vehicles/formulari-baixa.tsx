@@ -8,16 +8,16 @@ import { MIDA_PDF } from "./regles";
 const boto = "min-h-11 rounded-md px-4 font-medium disabled:opacity-60";
 const tb = t.vehicles.baixa;
 
-/** Botó "Donar de baixa" que obre el formulari (data i, si cal, justificant). */
+/** Botó "Donar de baixa" que obre el formulari (data i, si el vehicle encara no en té, la pòlissa AXA). */
 export function FormulariBaixa({
   vehicleId,
   avui,
-  relacioData,
+  tePolissa,
 }: {
   vehicleId: string;
   avui: string;
-  /** Data (dd/mm/aaaa) de la relació vigent si hi surt la matrícula; null si cal justificant. */
-  relacioData: string | null;
+  /** El vehicle ja té la pòlissa AXA (PDF) desada. */
+  tePolissa: boolean;
 }) {
   const [obert, setObert] = useState(false);
   const [estat, accio, pendent] = useActionState<EstatAccio, FormData>(donaDeBaixa, {});
@@ -48,22 +48,20 @@ export function FormulariBaixa({
           className="w-full rounded-md border bg-white px-3 py-2 sm:w-auto"
         />
       </label>
-      {relacioData ? (
-        <p className="text-sm text-gray-700">{tb.ambRelacio(relacioData)}</p>
-      ) : (
-        <label className="block space-y-1">
-          <span className="block text-sm text-amber-900">{tb.senseRelacio}</span>
-          <input
-            type="file"
-            name="justificant"
-            required
-            accept="application/pdf,.pdf"
-            onChange={(ev) => setMassaGran((ev.target.files?.[0]?.size ?? 0) > MIDA_PDF)}
-            className="min-w-0 max-w-full text-sm"
-            aria-label={tb.justificant}
-          />
-        </label>
-      )}
+      <label className="block space-y-1">
+        <span className={`block text-sm ${tePolissa ? "text-gray-700" : "text-amber-900"}`}>
+          {tePolissa ? tb.ambPolissa : tb.sensePolissa}
+        </span>
+        <input
+          type="file"
+          name="polissa"
+          required={!tePolissa}
+          accept="application/pdf,.pdf"
+          onChange={(ev) => setMassaGran((ev.target.files?.[0]?.size ?? 0) > MIDA_PDF)}
+          className="min-w-0 max-w-full text-sm"
+          aria-label={tb.polissa}
+        />
+      </label>
       {massaGran && <p className="text-sm text-red-700">{t.vehicles.errors.pdfMida}</p>}
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" disabled={pendent || massaGran} className={`${boto} bg-red-700 text-white`}>

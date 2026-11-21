@@ -7,7 +7,7 @@ import { avuiMadrid } from "@/lib/dies-laborables";
 import { descarregaPdf, esborraPdf, pujaPdf } from "@/lib/documents";
 import { extornEsperat } from "@/lib/extorns/calcula";
 import { llegeixRelacioExcel, llegeixRelacioPdf } from "@/lib/flota/llegeix-relacio";
-import { esPdf, MIME, tipusDocument, type TipusDocument } from "@/lib/pdf";
+import { esPdf, MIME, tipusDocument } from "@/lib/pdf";
 import { createClient } from "@/lib/supabase/server";
 import { t } from "@/lib/textos";
 import { esAdmin, obtenirUsuariActual } from "@/lib/usuari-actual";
@@ -24,7 +24,6 @@ export type EstatAccio = { error?: string; ok?: string };
 
 const e = t.vehicles.errors;
 
-type Relacio = { fitxer: string; nom_fitxer: string; data_relacio: string; matricules: string[] };
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 /** Llegeix un PDF del formulari. null si falta; string si és un error. */
@@ -105,49 +104,42 @@ export async function donaDeBaixa(_prev: EstatAccio, formData: FormData): Promis
 
   const supabase = await createClient();
   let baixaId: string | null = null;
-  let justificantNou: string | null = null;
 
   try {
-    const [{ data: vehicle, error: errV }, { data: relacio, error: errR }] = await Promise.all([
-      supabase
-        .from("vehicles_assegurats")
-        .select("matricula, estat, prima_total")
-        .eq("id", id)
-        .maybeSingle<{ matricula: string; estat: string; prima_total: number | null }>(),
-      supabase
-        .from("relacio_flota_vigent")
-        .select("fitxer, nom_fitxer, data_relacio, matricules")
-        .maybeSingle<Relacio>(),
-    ]);
+    const { data: vehicle, error: errV } = await supabase
+      .from("vehicles_assegurats")
+      .select("matricula, estat, prima_total, polissa_path")
+      .eq("id", id)
+      .maybeSingle<{ matricula: string; estat: string; prima_total: number | null; polissa_path: string | null }>();
     if (errV) throw errV;
-    if (errR) throw errR;
     if (!vehicle) return { error: e.noTrobat };
     if (vehicle.estat === "baixa_enviada" || vehicle.estat === "donat_de_baixa") return { error: e.jaBaixa };
     if (vehicle.estat !== "assegurat") return { error: e.estatBaixa };
 
-    // Justificant: la relació vigent si hi surt la matrícula; si no, el PDF que s'adjunta.
-    const ambRelacio = !!relacio && relacio.matricules.includes(vehicle.matricula);
-    let adjunt: Adjunt;
-    if (ambRelacio) {
-      const ext = (relacio!.fitxer.split(".").pop() ?? "pdf") as TipusDocument;
-      adjunt = {
-        nom: `Relacio Flota VO ${dataCurta(relacio!.data_relacio).replaceAll("/", "-")}.${ext}`,
-        contingut: await descarregaPdf(relacio!.fitxer),
-        tipus: MIME[ext] ?? MIME.pdf,
-      };
-    } else {
-      const pdf = await pdfDelFormulari(formData.get("justificant"));
-      if (pdf === null) return { error: e.justificant };
-      if (typeof pdf === "string") return { error: pdf };
-      adjunt = { nom: `Justificant ${vehicle.matricula}.pdf`, contingut: pdf, tipus: "application/pdf" };
-    }
+    // Adjunt: la pòlissa AXA del vehicle. Si se'n puja una al formulari, es desa al vehicle (substitueix l'anterior).
+    const pdfNou = await pdfDelFormulari(formData.get("polissa"));
+    if (typeof pdfNou === "string") return { error: pdfNou };
+    if (pdfNou === null && !vehicle.polissa_path) return { error: e.polissa };
 
     const config = configCorreu();
+
+    let polissaPath = vehicle.polissa_path!;
+    let contingut: Uint8Array;
+    if (pdfNou) {
+      polissaPath = `polisses/${id}.pdf`;
+      await pujaPdf(polissaPath, pdfNou);
+      const { error: errPol } = await supabase.rpc("desa_polissa", { p_vehicle: id, p_path: polissaPath });
+      if (errPol) throw errPol;
+      contingut = pdfNou;
+    } else {
+      contingut = await descarregaPdf(polissaPath);
+    }
+    const adjunt: Adjunt = { nom: `POL. ${vehicle.matricula}.pdf`, contingut, tipus: "application/pdf" };
 
     const { data: reserva, error: errP } = await supabase.rpc("prepara_baixa", {
       p_vehicle: id,
       p_data: dataBaixa,
-      p_tipus: ambRelacio ? "relacio" : "nou_titular",
+      p_tipus: "polissa",
       p_extorn: extornEsperat(vehicle.prima_total === null ? null : Number(vehicle.prima_total), dataBaixa),
     });
     if (errP) {
@@ -156,23 +148,13 @@ export async function donaDeBaixa(_prev: EstatAccio, formData: FormData): Promis
     }
     baixaId = String(reserva);
 
-    // El justificant es desa abans d'enviar: si l'enviament queda incert, "Sí, ha sortit" el conserva.
-    let justificantPath = relacio?.fitxer ?? null;
-    if (!ambRelacio) {
-      justificantPath = `justificants/${baixaId}.pdf`;
-      await pujaPdf(justificantPath, adjunt.contingut);
-      justificantNou = justificantPath;
-    }
+    // El document adjunt queda lligat a la baixa abans d'enviar: si l'enviament queda incert, "Sí, ha sortit" el conserva.
+    const justificantPath = polissaPath;
     const { error: errJ } = await supabase.rpc("desa_justificant", { p_baixa: baixaId, p_justificant: justificantPath });
     if (errJ) throw errJ;
 
     try {
-      const correu = correuBaixa({
-        matricula: vehicle.matricula,
-        dataBaixa,
-        justificant: ambRelacio ? "relacio" : "nou_titular",
-        signatura: config.signatura,
-      });
+      const correu = correuBaixa({ matricula: vehicle.matricula, dataBaixa, signatura: config.signatura });
       await enviaCorreu(correu, [adjunt]);
     } catch (err) {
       console.error("Error enviant el correu de baixa", baixaId, err);
@@ -181,7 +163,6 @@ export async function donaDeBaixa(_prev: EstatAccio, formData: FormData): Promis
         return { error: e.correuIncert };
       }
       await revertir(supabase, "descarta_baixa", { p_baixa: baixaId });
-      if (justificantNou) await esborraPdf(justificantNou);
       return { error: e.correu };
     }
 
@@ -202,7 +183,6 @@ export async function donaDeBaixa(_prev: EstatAccio, formData: FormData): Promis
     // Errors abans d'enviar el correu: és segur desfer la reserva.
     console.error("Error a la baixa", err);
     if (baixaId) await revertir(supabase, "descarta_baixa", { p_baixa: baixaId });
-    if (baixaId && justificantNou) await esborraPdf(justificantNou);
     return { error: err instanceof ErrorCorreu ? e.correu : e.generic };
   }
 

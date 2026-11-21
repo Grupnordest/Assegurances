@@ -38,15 +38,15 @@ type Props = {
     extorn_esperat: number | null;
     recent: boolean;
   } | null;
-  /** Data (dd/mm/aaaa) de la Relació de Flota VO vigent si hi surt la matrícula. */
-  relacioData: string | null;
+  /** El vehicle ja té la pòlissa AXA (PDF) desada. */
+  tePolissa: boolean;
 };
 
 const camp = "w-full rounded-md border px-3 py-2";
 const eur = new Intl.NumberFormat("ca-ES", { style: "currency", currency: "EUR" });
 const data = (s: string | null) => (s ? s.split("-").reverse().join("/") : "—");
 
-export default function FilaVehicle({ vehicle: v, usuaris, centres, capPostvenda, avui, baixa, relacioData }: Props) {
+export default function FilaVehicle({ vehicle: v, usuaris, centres, capPostvenda, avui, baixa, tePolissa }: Props) {
   const [estat, accio, pendent] = useActionState<EstatClassificacio, FormData>(classificaVehicle, {});
   const tv = t.vehicles;
   // Camps controlats: React 19 buida els formularis no controlats després de cada acció,
@@ -95,7 +95,7 @@ export default function FilaVehicle({ vehicle: v, usuaris, centres, capPostvenda
           <PendentConfirmar baixaId={baixa.id} tipus={baixa.estat === "enviant" ? "baixa" : "anullacio"} />
         ))}
       {v.estat === "assegurat" && !baixa && (
-        <FormulariBaixa vehicleId={v.id} avui={avui} relacioData={relacioData} />
+        <FormulariBaixa vehicleId={v.id} avui={avui} tePolissa={tePolissa} />
       )}
       {baixa && baixa.estat === "enviada" && (v.estat === "baixa_enviada" || v.estat === "donat_de_baixa") && (
         <div className="space-y-2 rounded-md bg-gray-50 p-3 text-sm text-gray-700">

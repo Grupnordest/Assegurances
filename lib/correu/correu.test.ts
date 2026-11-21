@@ -14,18 +14,12 @@ const ENTORN = {
 };
 
 describe("correuBaixa", () => {
-  it("segueix el format d'Administració, amb la relació d'AXA", () => {
-    const c = correuBaixa({ matricula: "0246NSZ", dataBaixa: "2026-11-25", justificant: "relacio", signatura: "Nuri" });
+  it("segueix el format d'Administració i adjunta la pòlissa AXA", () => {
+    const c = correuBaixa({ matricula: "0246NSZ", dataBaixa: "2026-11-25", signatura: "Nuri" });
     expect(c.assumpte).toBe("Baixa flota tot risc – 0246NSZ");
     expect(c.cos).toBe(
       "Bones,\n\nSol·licitem la baixa de la matrícula 0246NSZ amb data 25/11/2026.\nAdjunto pòlissa AXA.\n\nSalutacions\nNuri",
     );
-  });
-
-  it("amb justificant del nou titular canvia la línia de l'adjunt", () => {
-    const c = correuBaixa({ matricula: "0246NSZ", dataBaixa: "2026-11-25", justificant: "nou_titular", signatura: "Nuri" });
-    expect(c.cos).toContain("Adjunto justificant del nou titular.");
-    expect(c.cos).not.toContain("pòlissa AXA");
   });
 });
 

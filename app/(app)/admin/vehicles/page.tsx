@@ -7,9 +7,7 @@ import FilaVehicle, { type VehicleFila } from "./fila-vehicle";
 import FormulariLlistat from "./formulari-llistat";
 import type { FilaDescartada } from "@/lib/flota/llegeix-llistat";
 import { textDescartades } from "./regles";
-import FormulariRelacio from "./formulari-relacio";
 import { avuiMadrid } from "@/lib/dies-laborables";
-import { dataCurta } from "@/lib/correu/plantilles";
 
 type Fila = VehicleFila & { responsable_nom: string | null };
 type Carrega = {
@@ -73,7 +71,7 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
     { data: usuaris, error: errU },
     { data: centres, error: errC },
     { data: cap, error: errCap },
-    { data: relacio, error: errR },
+    { data: ambPolissa, error: errPol },
     { data: baixes, error: errB },
   ] = await Promise.all([
       supabase.from("usuaris").select("id, nom").eq("actiu", true).order("nom").returns<{ id: string; nom: string }[]>(),
@@ -87,9 +85,10 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
         .limit(1)
         .maybeSingle<{ nom: string }>(),
       supabase
-        .from("relacio_flota_vigent")
-        .select("data_relacio, matricules")
-        .maybeSingle<{ data_relacio: string; matricules: string[] }>(),
+        .from("vehicles_assegurats")
+        .select("id")
+        .not("polissa_path", "is", null)
+        .returns<{ id: string }[]>(),
       supabase
         .from("baixes")
         .select("id, vehicle_id, estat, data_baixa, extorn_esperat, updated_at")
@@ -99,12 +98,11 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
   if (errU) throw errU;
   if (errC) throw errC;
   if (errCap) throw errCap;
-  if (errR) throw errR;
+  if (errPol) throw errPol;
   if (errB) throw errB;
 
   const avui = avuiMadrid();
-  const aRelacio = new Set(relacio?.matricules ?? []);
-  const relacioData = relacio ? dataCurta(relacio.data_relacio) : null;
+  const tePolissa = new Set(ambPolissa.map((p) => p.id));
   const fa2min = Date.now() - 2 * 60_000;
   const baixaDe = new Map(
     baixes.map((b) => [
@@ -138,8 +136,6 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
         {carrega.descartades.length > 0 && <p className="text-amber-900">{textDescartades(carrega.descartades)}</p>}
       </div>
 
-      <FormulariRelacio vigent={relacio ? tv.relacio.vigent(relacioData!, relacio.matricules.length) : null} />
-
       <nav className="flex flex-wrap gap-2">
         <Link href="/admin/vehicles" className={pestanya(!tots)}>
           {tv.pendents} ({pendents})
@@ -162,7 +158,7 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
               capPostvenda={cap?.nom ?? null}
               avui={avui}
               baixa={baixaDe.get(v.id) ?? null}
-              relacioData={aRelacio.has(v.matricula) ? relacioData : null}
+              tePolissa={tePolissa.has(v.id)}
             />
           ))}
         </ul>
