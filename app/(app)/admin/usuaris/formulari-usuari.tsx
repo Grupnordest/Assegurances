@@ -39,8 +39,8 @@ export default function FormulariUsuari({ centres, usuari }: Props) {
 
       <label className="block space-y-1">
         <span className="text-sm text-gray-600">{t.usuaris.camps.centre}</span>
-        <select name="centreId" required defaultValue={usuari?.centreId ?? ""} className={camp}>
-          <option value="" disabled>—</option>
+        <select name="centreId" defaultValue={usuari?.centreId ?? ""} className={camp}>
+          <option value="">{t.usuaris.totsCentres}</option>
           {centres.map((c) => (
             <option key={c.id} value={c.id}>
               {c.nom}

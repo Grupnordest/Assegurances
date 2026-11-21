@@ -64,8 +64,15 @@ describe("usuariSchema", () => {
     expect(usuariSchema.safeParse({ ...base, nom: "  " }).success).toBe(false);
   });
 
-  it("exigeix un centre, amb missatge en català", () => {
-    for (const centreId of ["", "0", "abc", null]) {
+  it("centre buit = tots els centres", () => {
+    for (const centreId of ["", null]) {
+      const r = usuariSchema.safeParse({ ...base, centreId });
+      expect(r.success && r.data.centreId).toBe(null);
+    }
+  });
+
+  it("rebutja centres no vàlids, amb missatge en català", () => {
+    for (const centreId of ["0", "abc"]) {
       const r = usuariSchema.safeParse({ ...base, centreId });
       expect(r.success).toBe(false);
       expect(!r.success && r.error.issues[0].message).toBe("Tria un centre.");

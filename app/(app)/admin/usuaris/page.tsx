@@ -108,7 +108,7 @@ export default async function UsuarisPage({ searchParams }: { searchParams: Prom
                 </p>
                 <p className="break-all text-sm text-gray-600">{u.email}</p>
                 <p className="text-sm text-gray-600">
-                  {u.centres?.nom ?? t.inici.senseCentre} · {u.rols.map((r) => t.rols[r]).join(", ")}
+                  {u.centres?.nom ?? t.usuaris.totsCentres} · {u.rols.map((r) => t.rols[r]).join(", ")}
                 </p>
               </div>
               <div className="flex items-start gap-2">

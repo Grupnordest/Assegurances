@@ -13,8 +13,11 @@ export const usuariSchema = z.object({
     .string({ invalid_type_error: e.email })
     .transform(normalitzaEmail)
     .refine((v) => z.string().email().safeParse(v).success && esDelDomini(v), e.email),
-  // PRD: cada usuari pertany a un Centre. La validesa real la dona la clau forana.
-  centreId: z.coerce.number({ invalid_type_error: e.centre }).int(e.centre).positive(e.centre),
+  // Buit = tots els centres (p. ex. el Cap de postvenda o Administració). La validesa real la dona la clau forana.
+  centreId: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? null : v),
+    z.coerce.number({ invalid_type_error: e.centre }).int(e.centre).positive(e.centre).nullable(),
+  ),
   rols: z.array(z.enum(ROLS, { errorMap: () => ({ message: e.rols }) })).min(1, e.rols),
 });
 

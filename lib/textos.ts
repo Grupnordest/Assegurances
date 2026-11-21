@@ -170,6 +170,7 @@ export const t = {
     titol: "Usuaris",
     nou: "Nou usuari",
     filtreCentre: "Centre",
+    totsCentres: "Tots els centres",
     filtreRol: "Rol",
     tots: "Tots",
     filtra: "Filtra",
