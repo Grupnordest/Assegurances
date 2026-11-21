@@ -140,3 +140,20 @@ export function avisResolucioAlta(p: {
     ].join("\n"),
   };
 }
+
+/** Avís a Administració: a una Sol·licitud d'alta li falten el PC i/o la FT. */
+export function avisFaltenDocuments(p: { matricula: string; falten: string[]; sollicitant: string; enllac: string }): Correu {
+  return {
+    assumpte: `Falta documentació – alta ${p.matricula}`,
+    cos: [
+      "Hola,",
+      "",
+      `${p.sollicitant} ha demanat l'alta del ${p.matricula}, però falta: ${p.falten.join(" i ")}.`,
+      "Sense aquests documents no es pot enviar a la corredoria.",
+      "",
+      `Afegeix-los aquí: ${p.enllac}`,
+      "",
+      "Control d'assegurances",
+    ].join("\n"),
+  };
+}

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { correusAmbRol, enviaAvis } from "@/lib/altes/avisos";
 import { MIME_ADJUNT, tipusAdjunt } from "@/lib/altes/fitxers";
 import { altaSchema, FOTOS, MIDA_FITXER, MIDA_TOTAL_ADJUNTS, rolValidador } from "@/lib/altes/regles";
-import { avisSollicitudAlta } from "@/lib/correu/plantilles";
+import { avisFaltenDocuments, avisSollicitudAlta } from "@/lib/correu/plantilles";
 import { descarregaPdf, esborraPdf, pujaPdf } from "@/lib/documents";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalitzaMatricula } from "@/lib/estoc/matricula";
@@ -113,13 +113,11 @@ export async function creaAlta(_prev: EstatAlta, formData: FormData): Promise<Es
   if (pcR && "error" in pcR) return { error: pcR.error };
   if (ftR && "error" in ftR) return { error: ftR.error };
   const pc = pcR, ft = ftR;
-  // O tots dos documents nous o cap (llavors es reaprofiten els d'una alta anterior).
-  if (!!pc !== !!ft) return { error: e.documents };
-  let total = [...fotos, ...(pc && ft ? [pc, ft] : [])].reduce((s, x) => s + x.bytes.length, 0);
-  if (!pc) {
-    // Es reaprofiten el PC i la FT d'una alta anterior: també compten per al límit del correu.
+  // PC i FT són opcionals: el que no es pugi es reaprofita d'una alta anterior o l'afegeix Administració.
+  let total = [...fotos, ...(pc ? [pc] : []), ...(ft ? [ft] : [])].reduce((s, x) => s + x.bytes.length, 0);
+  if (!pc || !ft) {
     try {
-      total += await midaDocsPrevis(d.matricula);
+      total += await midaDocsPrevis(d.matricula, { pc: !pc, ft: !ft });
     } catch (err) {
       console.error("No s'han pogut llegir els documents anteriors", err);
       return { error: e.documents };
@@ -128,6 +126,7 @@ export async function creaAlta(_prev: EstatAlta, formData: FormData): Promise<Es
   if (total > MIDA_TOTAL_ADJUNTS) return { error: e.mida };
 
   const carpeta = `altes/${crypto.randomUUID()}`;
+  let altaId: string | null = null;
   const pujats: string[] = [];
   const puja = async (nom: string, x: { bytes: Uint8Array; tipus: keyof typeof MIME_ADJUNT }) => {
     const path = `${carpeta}/${nom}.${x.tipus}`;
@@ -143,7 +142,7 @@ export async function creaAlta(_prev: EstatAlta, formData: FormData): Promise<Es
     const ftPath = ft ? await puja("ft", ft) : null;
 
     const supabase = await createClient();
-    const { error } = await supabase.rpc("crea_sollicitud_alta", {
+    const { data: nouId, error } = await supabase.rpc("crea_sollicitud_alta", {
       p_matricula: d.matricula,
       p_motiu: d.motiu,
       p_data_alta: d.dataAlta,
@@ -155,6 +154,7 @@ export async function creaAlta(_prev: EstatAlta, formData: FormData): Promise<Es
       p_data_prevista: d.dataPrevista,
       p_comentari: d.comentari,
     });
+    altaId = error ? null : String(nouId);
     if (error) {
       // Resposta de la base de dades: la sol·licitud no s'ha creat, es pot netejar.
       console.error("Error creant la sol·licitud d'alta", error);
@@ -187,25 +187,50 @@ export async function creaAlta(_prev: EstatAlta, formData: FormData): Promise<Es
     console.error("No s'ha pogut avisar els validadors", err);
   }
 
+  // Si falta el PC o la FT, Administració els ha d'afegir abans que es pugui enviar.
+  try {
+    if (altaId) {
+      const { data: fila } = await createAdminClient()
+        .from("vehicles_assegurats")
+        .select("pc_path, ft_path")
+        .eq("id", altaId)
+        .single<{ pc_path: string | null; ft_path: string | null }>();
+      if (fila && (!fila.pc_path || !fila.ft_path)) {
+        const origen = (await headers()).get("origin") ?? "";
+        await enviaAvis(
+          avisFaltenDocuments({
+            matricula: d.matricula,
+            falten: [!fila.pc_path && "PC", !fila.ft_path && "FT"].filter(Boolean) as string[],
+            sollicitant: usuari.nom,
+            enllac: `${origen}/validar`,
+          }),
+          await correusAmbRol(["administracio"]),
+        );
+      }
+    }
+  } catch (err) {
+    console.error("No s'ha pogut avisar Administració dels documents", err);
+  }
+
   revalidatePath("/altes");
   return { ok: t.altes.ok };
 }
 
-/** Mida (bytes) del PC i la FT de l'última alta de la matrícula que en tingui. */
-async function midaDocsPrevis(matricula: string): Promise<number> {
+/** Mida (bytes) dels documents que es reaprofitaran d'una alta anterior (els mateixos que tria la BD). */
+async function midaDocsPrevis(matricula: string, cal: { pc: boolean; ft: boolean }): Promise<number> {
   const { data, error } = await createAdminClient()
     .from("vehicles_assegurats")
     .select("pc_path, ft_path")
     .eq("matricula", matricula)
-    .not("pc_path", "is", null)
-    .not("ft_path", "is", null)
+    .or("pc_path.not.is.null,ft_path.not.is.null")
     .order("created_at", { ascending: false })
     .limit(1)
-    .maybeSingle<{ pc_path: string; ft_path: string }>();
+    .maybeSingle<{ pc_path: string | null; ft_path: string | null }>();
   if (error) throw error;
   if (!data) return 0;
-  const [pc, ft] = await Promise.all([descarregaPdf(data.pc_path), descarregaPdf(data.ft_path)]);
-  return pc.length + ft.length;
+  const paths = [cal.pc && data.pc_path, cal.ft && data.ft_path].filter((p): p is string => !!p);
+  const fitxers = await Promise.all(paths.map(descarregaPdf));
+  return fitxers.reduce((s, f) => s + f.length, 0);
 }
 
 /** Validadors del Motiu; si no n'hi ha cap d'actiu, Administració (perquè algú ho vegi). */

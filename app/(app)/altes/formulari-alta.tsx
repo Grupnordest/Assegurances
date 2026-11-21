@@ -26,7 +26,6 @@ export default function FormulariAlta({
   const [cerca, setCerca] = useState<ResultatCerca | null>(null);
   const [preparant, setPreparant] = useState(false);
   const [errorLocal, setErrorLocal] = useState<string>();
-  const [usarPrevis, setUsarPrevis] = useState(false);
   const [estat, accio, pendent] = useActionState<EstatAlta, FormData>(creaAlta, {});
 
   async function busca(ev: React.FormEvent) {
@@ -170,24 +169,15 @@ export default function FormulariAlta({
           </fieldset>
 
           <fieldset className="space-y-2">
-            {trobat.docsPrevis && (
-              <label className="flex items-start gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={usarPrevis} onChange={(ev) => setUsarPrevis(ev.target.checked)} className="mt-1" />
-                <span>{ta.camps.usarPrevis}</span>
-              </label>
-            )}
-            {!(trobat.docsPrevis && usarPrevis) && (
-              <>
-                <label className="block space-y-1">
-                  <span className="block text-sm text-gray-600">{ta.camps.pc}</span>
-                  <input type="file" name="pc" required accept="image/*,application/pdf" className="text-sm" />
-                </label>
-                <label className="block space-y-1">
-                  <span className="block text-sm text-gray-600">{ta.camps.ft}</span>
-                  <input type="file" name="ft" required accept="image/*,application/pdf" className="text-sm" />
-                </label>
-              </>
-            )}
+            <p className="text-sm text-gray-700">{trobat.docsPrevis ? ta.camps.docsPrevis : ta.camps.docsOpcionals}</p>
+            <label className="block space-y-1">
+              <span className="block text-sm text-gray-600">{ta.camps.pc}</span>
+              <input type="file" name="pc" accept="image/*,application/pdf" className="text-sm" />
+            </label>
+            <label className="block space-y-1">
+              <span className="block text-sm text-gray-600">{ta.camps.ft}</span>
+              <input type="file" name="ft" accept="image/*,application/pdf" className="text-sm" />
+            </label>
           </fieldset>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

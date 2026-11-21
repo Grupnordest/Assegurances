@@ -3,15 +3,15 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { enviaAvis } from "@/lib/altes/avisos";
-import { extensio, MIME_ADJUNT } from "@/lib/altes/fitxers";
-import { COBERTURES, FOTOS, MIDA_TOTAL_ADJUNTS } from "@/lib/altes/regles";
+import { extensio, MIME_ADJUNT, tipusAdjunt } from "@/lib/altes/fitxers";
+import { COBERTURES, FOTOS, MIDA_FITXER, MIDA_TOTAL_ADJUNTS } from "@/lib/altes/regles";
 import { configCorreu, enviaCorreu, ErrorCorreu, type Adjunt } from "@/lib/correu/graph";
 import { avisResolucioAlta, correuAlta } from "@/lib/correu/plantilles";
-import { descarregaPdf } from "@/lib/documents";
+import { descarregaPdf, esborraPdf, pujaPdf } from "@/lib/documents";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { t } from "@/lib/textos";
-import { obtenirUsuariActual } from "@/lib/usuari-actual";
+import { esAdmin, obtenirUsuariActual } from "@/lib/usuari-actual";
 
 export type EstatAccio = { error?: string; ok?: string };
 
@@ -28,6 +28,7 @@ function missatgeBd(err: { code?: string; message?: string }): string {
   if (m.includes("ja_resolt") || m.includes("no_trobat")) return e.jaResolt;
   if (m.includes("motiu_rebuig")) return e.motiu;
   if (m.includes("enviant_ara")) return e.enviantAra;
+  if (m.includes("falten_documents")) return e.faltenDocuments;
   return e.generic;
 }
 
@@ -206,4 +207,56 @@ export async function resolAlta(_prev: EstatAccio, formData: FormData): Promise<
   if (resultat === "enviat") await avisaSollicitant(id, true);
   revalidatePath(RUTA);
   return { ok: t.vehicles.desat };
+}
+
+/** Administració afegeix el PC i/o la FT que falten a una Sol·licitud d'alta. */
+export async function afegeixDocuments(_prev: EstatAccio, formData: FormData): Promise<EstatAccio> {
+  if (!esAdmin(await obtenirUsuariActual())) return { error: e.permis };
+  const id = formData.get("id");
+  if (!esUuid(id)) return { error: e.generic };
+
+  const llegeix = async (valor: FormDataEntryValue | null) => {
+    if (!(valor instanceof File) || valor.size === 0) return null;
+    if (valor.size > MIDA_FITXER) return "mida" as const;
+    const bytes = new Uint8Array(await valor.arrayBuffer());
+    const tipus = tipusAdjunt(bytes);
+    return tipus ? { bytes, tipus } : ("tipus" as const);
+  };
+  const pc = await llegeix(formData.get("pc"));
+  const ft = await llegeix(formData.get("ft"));
+  if (pc === "mida" || ft === "mida") return { error: t.altes.errors.mida };
+  if (pc === "tipus" || ft === "tipus") return { error: t.altes.errors.fitxer };
+  if (!pc && !ft) return { error: t.altes.errors.documents };
+
+  const pujats: string[] = [];
+  try {
+    const { data: fila, error: errF } = await createAdminClient()
+      .from("vehicles_assegurats")
+      .select("fotos")
+      .eq("id", id)
+      .single<{ fotos: string[] }>();
+    if (errF) throw errF;
+    const carpeta = fila.fotos[0].split("/").slice(0, 2).join("/");
+    const puja = async (nom: "pc" | "ft", x: { bytes: Uint8Array; tipus: keyof typeof MIME_ADJUNT }) => {
+      const path = `${carpeta}/${nom}-${crypto.randomUUID()}.${x.tipus}`;
+      await pujaPdf(path, x.bytes, MIME_ADJUNT[x.tipus]);
+      pujats.push(path);
+      return path;
+    };
+    const pcPath = pc ? await puja("pc", pc) : null;
+    const ftPath = ft ? await puja("ft", ft) : null;
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc("afegeix_documents_alta", { p_id: id, p_pc: pcPath, p_ft: ftPath });
+    if (error) {
+      console.error("Error afegint documents", error);
+      await Promise.all(pujats.map(esborraPdf));
+      return { error: missatgeBd(error) };
+    }
+  } catch (err) {
+    console.error("Error afegint documents", err);
+    return { error: e.generic };
+  }
+  revalidatePath(RUTA);
+  return { ok: t.validar.okDocuments };
 }

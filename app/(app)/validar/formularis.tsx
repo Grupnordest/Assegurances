@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { COBERTURES } from "@/lib/altes/regles";
 import { t } from "@/lib/textos";
-import { rebutjaAlta, resolAlta, validaAlta, type EstatAccio } from "./actions";
+import { afegeixDocuments, rebutjaAlta, resolAlta, validaAlta, type EstatAccio } from "./actions";
 
 const tv = t.validar;
 const boto = "min-h-11 rounded-md px-4 font-medium disabled:opacity-60";
@@ -15,7 +15,17 @@ function Missatge({ estat, pendent }: { estat: EstatAccio; pendent: boolean }) {
   return null;
 }
 
-export function AccionsAlta({ id, matricula, cobertura }: { id: string; matricula: string; cobertura: "tot_risc" | "tercers" }) {
+export function AccionsAlta({
+  id,
+  matricula,
+  cobertura,
+  documentsComplets,
+}: {
+  id: string;
+  matricula: string;
+  cobertura: "tot_risc" | "tercers";
+  documentsComplets: boolean;
+}) {
   const [estatV, accioV, pendentV] = useActionState<EstatAccio, FormData>(validaAlta, {});
   const [estatR, accioR, pendentR] = useActionState<EstatAccio, FormData>(rebutjaAlta, {});
   const [rebutjant, setRebutjant] = useState(false);
@@ -38,7 +48,7 @@ export function AccionsAlta({ id, matricula, cobertura }: { id: string; matricul
             </option>
           ))}
         </select>
-        <button type="submit" disabled={ocupat} className={`${boto} bg-blue-700 text-white`}>
+        <button type="submit" disabled={ocupat || !documentsComplets} className={`${boto} bg-blue-700 text-white`}>
           {pendentV ? tv.validant : tv.valida}
         </button>
         <button type="button" disabled={ocupat} onClick={() => setRebutjant(true)} className={`${boto} border bg-white text-red-800`}>
@@ -78,6 +88,32 @@ export function PendentAlta({ id }: { id: string }) {
           {t.vehicles.baixa.noHaSortit}
         </button>
       </div>
+      <Missatge estat={estat} pendent={pendent} />
+    </form>
+  );
+}
+
+/** Administració: afegir el PC i/o la FT que falten. */
+export function FormulariDocuments({ id, faltaPc, faltaFt }: { id: string; faltaPc: boolean; faltaFt: boolean }) {
+  const [estat, accio, pendent] = useActionState<EstatAccio, FormData>(afegeixDocuments, {});
+  return (
+    <form action={accio} className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+      <input type="hidden" name="id" value={id} />
+      {faltaPc && (
+        <label className="block space-y-1">
+          <span className="block text-gray-700">{t.altes.camps.pc}</span>
+          <input type="file" name="pc" accept="image/*,application/pdf" className="text-sm" />
+        </label>
+      )}
+      {faltaFt && (
+        <label className="block space-y-1">
+          <span className="block text-gray-700">{t.altes.camps.ft}</span>
+          <input type="file" name="ft" accept="image/*,application/pdf" className="text-sm" />
+        </label>
+      )}
+      <button type="submit" disabled={pendent} className={`${boto} bg-gray-900 text-white`}>
+        {tv.afegeix}
+      </button>
       <Missatge estat={estat} pendent={pendent} />
     </form>
   );

@@ -4,8 +4,8 @@ import { dataCurta } from "@/lib/correu/plantilles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { t } from "@/lib/textos";
-import { exigeixUsuariActiu } from "@/lib/usuari-actual";
-import { AccionsAlta, PendentAlta } from "./formularis";
+import { esAdmin, exigeixUsuariActiu } from "@/lib/usuari-actual";
+import { AccionsAlta, FormulariDocuments, PendentAlta } from "./formularis";
 
 // L'enviament del correu d'alta amb adjunts (Graph) pot trigar.
 export const maxDuration = 60;
@@ -21,6 +21,8 @@ type Pendent = {
   data_prevista_baixa: string | null;
   comentari: string | null;
   fotos: string[];
+  pc_path: string | null;
+  ft_path: string | null;
   enviament_alta: "enviant" | null;
   enviament_at: string | null;
   sollicitant: { nom: string } | null;
@@ -38,7 +40,7 @@ export default async function ValidarPage() {
   const { data: pendents, error } = await supabase
     .from("vehicles_assegurats")
     .select(
-      "id, matricula, marca_model, color, motiu, cobertura, data_alta, data_prevista_baixa, comentari, fotos, enviament_alta, enviament_at, sollicitant:usuaris!vehicles_assegurats_sollicitant_id_fkey(nom), centres(nom)",
+      "id, matricula, marca_model, color, motiu, cobertura, data_alta, data_prevista_baixa, comentari, fotos, pc_path, ft_path, enviament_alta, enviament_at, sollicitant:usuaris!vehicles_assegurats_sollicitant_id_fkey(nom), centres(nom)",
     )
     .eq("estat", "sollicitat")
     .order("created_at")
@@ -101,6 +103,14 @@ export default async function ValidarPage() {
                     ) : null,
                   )}
                 </div>
+                {(!p.pc_path || !p.ft_path) && (
+                  <div className="space-y-2">
+                    <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+                      {tv.falten([!p.pc_path && "PC", !p.ft_path && "FT"].filter(Boolean).join(" i "))}
+                    </p>
+                    {esAdmin(usuari) && <FormulariDocuments id={p.id} faltaPc={!p.pc_path} faltaFt={!p.ft_path} />}
+                  </div>
+                )}
                 {p.enviament_alta === "enviant" ? (
                   p.enviament_at && new Date(p.enviament_at).getTime() > fa2min ? (
                     <p className="text-sm text-gray-600">{tv.enviantAra}</p>
@@ -108,7 +118,12 @@ export default async function ValidarPage() {
                     <PendentAlta id={p.id} />
                   )
                 ) : (
-                  <AccionsAlta id={p.id} matricula={p.matricula} cobertura={p.cobertura} />
+                  <AccionsAlta
+                    id={p.id}
+                    matricula={p.matricula}
+                    cobertura={p.cobertura}
+                    documentsComplets={!!p.pc_path && !!p.ft_path}
+                  />
                 )}
               </li>
             );
