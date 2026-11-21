@@ -1,5 +1,5 @@
 import "server-only";
-import { destinataris, llegeixConfigCorreu, type ConfigCorreu } from "./config";
+import { destinataris, llegeixConfigCorreu, type ConfigCorreu, type Destinataris } from "./config";
 import type { Correu } from "./plantilles";
 
 export type Adjunt = { nom: string; contingut: Uint8Array; tipus: string };
@@ -48,9 +48,10 @@ async function token(c: ConfigCorreu): Promise<string> {
 const adreces = (llista: string[]) => llista.map((address) => ({ emailAddress: { address } }));
 
 /** Envia un correu des de la Bústia d'assegurances (Microsoft Graph sendMail). */
-export async function enviaCorreu(correu: Correu, adjunts: Adjunt[] = []): Promise<void> {
+// `dest`: destinataris propis (p. ex. Proassa); per defecte, la Corredoria de Tot risc.
+export async function enviaCorreu(correu: Correu, adjunts: Adjunt[] = [], dest?: Destinataris): Promise<void> {
   const c = configCorreu();
-  const d = destinataris(c);
+  const d = dest ?? destinataris(c);
   let accessToken: string;
   try {
     accessToken = await token(c);

@@ -48,6 +48,7 @@ Les baixes s'envien des de `assegurances@` amb una aplicació d'Entra pròpia (s
    Test-ApplicationAccessPolicy -Identity assegurances@grupnordest.com -AppId <Id. d'aplicació>   # → Granted
    ```
 5. Mentre es prova, posa la teva adreça a `CORREU_PROVES`: tots els correus hi aniran i la corredoria no en rebrà cap.
+6. L'enviament d'estoc a Proassa (pantalla **Vehicles flota**) va a `CORREU_PROASSA` amb còpia a `CORREU_COPIA_ADMIN`; `CORREU_PROVES` també el desvia.
 
 ## Desenvolupament
 

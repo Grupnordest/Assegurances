@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { destinataris, llegeixConfigCorreu } from "./config";
-import { correuAnullacio, correuBaixa } from "./plantilles";
+import { destinataris, destinatarisProassa, llegeixConfigCorreu } from "./config";
+import { correuAnullacio, correuBaixa, correuEstocProassa } from "./plantilles";
 
 const ENTORN = {
   AZURE_TENANT_ID: "tenant",
@@ -65,5 +65,31 @@ describe("configuració i destinataris", () => {
     const r = llegeixConfigCorreu({ ...ENTORN, CORREU_SIGNATURA: "", CORREU_GESTOR_SUPLENT: "", CORREU_COPIA_ADMIN: "" });
     expect(r.ok && r.config.signatura).toBe("Administració");
     expect(r.ok && destinataris(r.config).cc).toEqual([]);
+  });
+});
+
+describe("enviament d'estoc a Proassa", () => {
+  it("destinataris: Proassa amb còpia a Administració; en proves només proves; sense adreça → null", () => {
+    const amb = llegeixConfigCorreu({ ...ENTORN, CORREU_PROASSA: "flota@example.com" });
+    expect(amb.ok && destinatarisProassa(amb.config)).toEqual({ to: ["flota@example.com"], cc: ["assegurances@example.com"] });
+    const proves = llegeixConfigCorreu({ ...ENTORN, CORREU_PROASSA: "flota@example.com", CORREU_PROVES: "jo@example.com" });
+    expect(proves.ok && destinatarisProassa(proves.config)).toEqual({ to: ["jo@example.com"], cc: [] });
+    const dues = llegeixConfigCorreu({ ...ENTORN, CORREU_PROASSA: "Flota@example.com; altra@example.com" });
+    expect(dues.ok && destinatarisProassa(dues.config)?.to).toEqual(["flota@example.com", "altra@example.com"]);
+    const sense = llegeixConfigCorreu(ENTORN);
+    expect(sense.ok && destinatarisProassa(sense.config)).toBeNull();
+  });
+
+  it("el cos porta data, total, altes i baixes", () => {
+    const c = correuEstocProassa({ data: "2026-11-18", total: 270, altes: ["1111AAA"], baixes: ["2222BBB", "3333CCC"], signatura: "Nuri" });
+    expect(c.assumpte).toContain("18/11/2026");
+    expect(c.cos).toContain("a data 18/11/2026 (270 vehicles)");
+    expect(c.cos).toContain("Altes (1):\n- 1111AAA");
+    expect(c.cos).toContain("Baixes (2):\n- 2222BBB\n- 3333CCC");
+  });
+
+  it("sense canvis ho diu", () => {
+    const c = correuEstocProassa({ data: "2026-11-18", total: 1, altes: [], baixes: [], signatura: "Nuri" });
+    expect(c.cos).toContain("Sense canvis");
   });
 });

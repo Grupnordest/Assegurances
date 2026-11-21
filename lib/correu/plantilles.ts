@@ -37,3 +37,30 @@ export function correuAnullacio(p: { matricula: string; dataBaixa: string; signa
     ].join("\n"),
   };
 }
+
+/** Enviament de l'estoc a Proassa (Pòlissa Flota VO): data, total i matrícules que entren i surten. */
+export function correuEstocProassa(p: {
+  data: string;
+  total: number;
+  altes: string[];
+  baixes: string[];
+  signatura: string;
+}): Correu {
+  const llista = (titol: string, m: string[]) => (m.length ? [`${titol} (${m.length}):`, ...m.map((x) => `- ${x}`), ""] : []);
+  const canvis =
+    p.altes.length || p.baixes.length
+      ? [...llista("Altes", p.altes), ...llista("Baixes", p.baixes)]
+      : ["Sense canvis respecte a l'últim enviament.", ""];
+  return {
+    assumpte: `Stock VO Grup Nordest ${dataCurta(p.data)} – pòlissa flota VO`,
+    cos: [
+      "Bones,",
+      "",
+      `Us adjuntem l'estoc de vehicles d'ocasió a data ${dataCurta(p.data)} (${p.total} vehicles).`,
+      "",
+      ...canvis,
+      "Salutacions",
+      p.signatura,
+    ].join("\n"),
+  };
+}

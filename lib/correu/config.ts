@@ -11,6 +11,8 @@ export type ConfigCorreu = {
   signatura: string;
   /** Si té valor, tots els correus van només aquí (mode de proves). */
   proves: string | null;
+  /** Proassa (Pòlissa Flota VO): destinataris de l'enviament d'estoc. */
+  proassa: string[];
 };
 
 export type Destinataris = { to: string[]; cc: string[] };
@@ -48,6 +50,7 @@ export function llegeixConfigCorreu(e: Entorn): { ok: true; config: ConfigCorreu
       copiaAdmin: llista(e, "CORREU_COPIA_ADMIN"),
       signatura: valor(e, "CORREU_SIGNATURA") ?? "Administració",
       proves: valor(e, "CORREU_PROVES"),
+      proassa: llista(e, "CORREU_PROASSA"),
     },
   };
 }
@@ -58,4 +61,12 @@ export function destinataris(c: ConfigCorreu): Destinataris {
   const principal = c.gestorPrincipal.toLowerCase();
   const cc = [...new Set([...c.gestorSuplent, ...c.copiaAdmin].map((x) => x.toLowerCase()))];
   return { to: [c.gestorPrincipal], cc: cc.filter((x) => x !== principal) };
+}
+
+/** Destinataris de l'enviament d'estoc a Proassa: Proassa i còpia a Administració. En proves, només l'adreça de proves. */
+export function destinatarisProassa(c: ConfigCorreu): Destinataris | null {
+  if (c.proves) return { to: [c.proves], cc: [] };
+  if (c.proassa.length === 0) return null;
+  const to = [...new Set(c.proassa.map((x) => x.toLowerCase()))];
+  return { to, cc: [...new Set(c.copiaAdmin.map((x) => x.toLowerCase()))].filter((x) => !to.includes(x)) };
 }

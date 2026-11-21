@@ -23,6 +23,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Link href="/admin/vehicles" className={enllac}>
                 {t.menu.vehicles}
               </Link>
+              <Link href="/admin/flota" className={enllac}>
+                {t.menu.flota}
+              </Link>
               <Link href="/admin/estoc" className={enllac}>
                 {t.menu.estoc}
               </Link>
