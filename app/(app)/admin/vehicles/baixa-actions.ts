@@ -317,3 +317,88 @@ export async function marcaAssegurat(_prev: EstatAccio, formData: FormData): Pro
   revalidatePath("/admin/vehicles");
   return { ok: t.vehicles.assegurat.ok };
 }
+
+/** Baixa demanada des d'un Avís sense pòlissa: Administració la puja i la baixa s'envia (dues fases). */
+export async function enviaBaixaPendent(_prev: EstatAccio, formData: FormData): Promise<EstatAccio> {
+  if (!esAdmin(await obtenirUsuariActual())) return { error: e.permis };
+  const baixaId = String(formData.get("baixa") ?? "");
+  const vehicleId = String(formData.get("vehicle") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(baixaId) || !/^[0-9a-f-]{36}$/i.test(vehicleId)) return { error: e.noTrobat };
+  const pdf = await pdfDelFormulari(formData.get("polissa"));
+  if (pdf === null) return { error: e.polissa };
+  if (typeof pdf === "string") return { error: pdf };
+
+  const supabase = await createClient();
+  const path = `polisses/${vehicleId}-${crypto.randomUUID()}.pdf`;
+  let baixa: { data_baixa: string; matricula: string };
+  try {
+    const { data, error: errB } = await supabase
+      .from("baixes")
+      .select("data_baixa, estat, vehicles_assegurats!inner(id, matricula)")
+      .eq("id", baixaId)
+      .single<{ data_baixa: string; estat: string; vehicles_assegurats: { id: string; matricula: string } }>();
+    if (errB) throw errB;
+    if (data.estat !== "pendent_polissa" || data.vehicles_assegurats.id !== vehicleId) return { error: e.estatBaixa };
+    baixa = { data_baixa: data.data_baixa, matricula: data.vehicles_assegurats.matricula };
+
+    const config = configCorreu();
+    await pujaPdf(path, pdf);
+    const { error: errP } = await supabase.rpc("desa_polissa", { p_vehicle: vehicleId, p_path: path });
+    if (errP) throw errP;
+    // Si la data demanada ja ha passat, la BD la porta a avui.
+    const { data: dataFinal, error: errA } = await supabase.rpc("activa_baixa_pendent", { p_baixa: baixaId, p_polissa: path });
+    if (errA) {
+      console.error("Error activant la baixa pendent", errA);
+      return { error: missatgeErrorVehicles(errA) };
+    }
+    baixa.data_baixa = String(dataFinal ?? baixa.data_baixa);
+
+    try {
+      await enviaCorreu(correuBaixa({ matricula: baixa.matricula, dataBaixa: baixa.data_baixa, signatura: config.signatura }), [
+        { nom: `POL. ${baixa.matricula}.pdf`, contingut: pdf, tipus: "application/pdf" },
+      ]);
+    } catch (err) {
+      console.error("Error enviant la baixa pendent", baixaId, err);
+      if (err instanceof ErrorCorreu && err.incert) {
+        revalidatePath("/admin/vehicles");
+        return { error: e.correuIncert };
+      }
+      await revertir(supabase, "descarta_baixa", { p_baixa: baixaId });
+      revalidatePath("/admin/vehicles");
+      return { error: e.correu };
+    }
+    try {
+      const { error: errC } = await supabase.rpc("confirma_baixa", { p_baixa: baixaId, p_justificant: path });
+      if (errC) throw errC;
+    } catch (err) {
+      console.error("Baixa pendent enviada però no confirmada", baixaId, err);
+      revalidatePath("/admin/vehicles");
+      return { error: e.correuEnviatSenseDesar };
+    }
+  } catch (err) {
+    console.error("Error a la baixa pendent", err);
+    return { error: err instanceof ErrorCorreu ? e.correu : e.generic };
+  }
+  revalidatePath("/admin/vehicles");
+  return { ok: t.vehicles.baixa.ok };
+}
+
+/** Anul·la una baixa pendent de pòlissa (encara no s'ha enviat res a la corredoria). */
+export async function cancelaBaixaPendent(_prev: EstatAccio, formData: FormData): Promise<EstatAccio> {
+  if (!esAdmin(await obtenirUsuariActual())) return { error: e.permis };
+  const baixaId = String(formData.get("baixa") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(baixaId)) return { error: e.noTrobat };
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.rpc("cancela_baixa_pendent", { p_baixa: baixaId });
+    if (error) {
+      console.error("Error anul·lant la baixa pendent", error);
+      return { error: missatgeErrorVehicles(error) };
+    }
+  } catch (err) {
+    console.error("Error anul·lant la baixa pendent", err);
+    return { error: e.generic };
+  }
+  revalidatePath("/admin/vehicles");
+  return { ok: t.vehicles.baixa.okCancelaPendent };
+}

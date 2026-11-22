@@ -130,3 +130,22 @@ describe("circuit d'altes", () => {
     expect(real.ok && destinatarisAvis(real.config, [])).toBeNull();
   });
 });
+
+describe("avisos", () => {
+  it("Avís dels 7 dies amb els dos enllaços de resposta", async () => {
+    const { correuAvis } = await import("./plantilles");
+    const c = correuAvis({ tipus: "set_dies", matricula: "1105NPT", marcaModel: "Renault Clio", dataAlta: "2026-11-10", dataPrevista: null, enllac: "https://x/avis/T" });
+    expect(c.assumpte).toBe("Assegurança del 1105NPT – cal una resposta");
+    expect(c.cos).toContain("assegurat des del 10/11/2026");
+    expect(c.cos).toContain("Ja es pot donar de baixa: https://x/avis/T?r=baixa");
+    expect(c.cos).toContain("Encara el necessito fins a una data: https://x/avis/T?r=mante_fins");
+  });
+
+  it("VS: baixa o es manté; escalat diu qui no ha respost", async () => {
+    const { correuAvis } = await import("./plantilles");
+    const c = correuAvis({ tipus: "vs_12m", matricula: "X", marcaModel: null, dataAlta: null, dataPrevista: null, senseResposta: "Germán", enllac: "u" });
+    expect(c.assumpte).toBe("Sense resposta: Assegurança del X – cal una resposta");
+    expect(c.cos).toContain("Germán no ha respost");
+    expect(c.cos).toContain("Es manté: u?r=mante");
+  });
+});

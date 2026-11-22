@@ -157,3 +157,98 @@ export function avisFaltenDocuments(p: { matricula: string; falten: string[]; so
     ].join("\n"),
   };
 }
+
+export type TipusAvisCorreu = "set_dies" | "data_prevista" | "vs_12m" | "demo_4m";
+
+/** Avís al Responsable (o escalat) amb els dos enllaços de resposta (FR-13, FR-14, FR-15, FR-16, FR-32). */
+export function correuAvis(p: {
+  tipus: TipusAvisCorreu;
+  matricula: string;
+  marcaModel: string | null;
+  dataAlta: string | null;
+  dataPrevista: string | null;
+  /** Escalat: nom de qui no ha respost. */
+  senseResposta?: string | null;
+  enllac: string;
+}): Correu {
+  const vehicle = `${p.matricula}${p.marcaModel ? ` (${p.marcaModel})` : ""}`;
+  const desDe = p.dataAlta ? ` des del ${dataCurta(p.dataAlta)}` : "";
+  const pregunta = {
+    set_dies: `El ${vehicle} està assegurat${desDe} i no té data prevista de baixa. Encara el necessiteu?`,
+    data_prevista: `Ha arribat la data prevista de baixa del ${vehicle}${p.dataPrevista ? ` (${dataCurta(p.dataPrevista)})` : ""}. Es pot donar de baixa?`,
+    vs_12m: `El VS ${vehicle} està assegurat${desDe}. El donem de baixa o es manté?`,
+    demo_4m: `El ${vehicle} està assegurat${desDe} i no té data prevista de baixa. El donem de baixa o es manté?`,
+  }[p.tipus];
+  const opcions =
+    p.tipus === "vs_12m"
+      ? [`- Donar-lo de baixa: ${p.enllac}?r=baixa`, `- Es manté: ${p.enllac}?r=mante`]
+      : p.tipus === "demo_4m"
+        ? [`- Donar-lo de baixa: ${p.enllac}?r=baixa`, `- Es manté fins a una data: ${p.enllac}?r=mante_fins`]
+        : [`- Ja es pot donar de baixa: ${p.enllac}?r=baixa`, `- Encara el necessito fins a una data: ${p.enllac}?r=mante_fins`];
+  return {
+    assumpte: `${p.senseResposta ? "Sense resposta: " : ""}Assegurança del ${p.matricula} – cal una resposta`,
+    cos: [
+      "Hola,",
+      "",
+      ...(p.senseResposta ? [`${p.senseResposta} no ha respost aquest avís; te'l fem arribar a tu.`, ""] : []),
+      pregunta,
+      "",
+      ...opcions,
+      "",
+      "Cada enllaç obre una pàgina on pots triar la data abans de confirmar. Caduca d'aquí a 7 dies.",
+      "",
+      "Control d'assegurances",
+    ].join("\n"),
+  };
+}
+
+/** Avís a Administració: un Avís ha quedat sense resposta després de l'escalat (Excepció). */
+export function correuExcepcioAvis(p: { matricula: string; marcaModel: string | null; enllac: string }): Correu {
+  return {
+    assumpte: `Excepció: avís sense resposta – ${p.matricula}`,
+    cos: [
+      "Hola,",
+      "",
+      `Ningú ha respost l'avís del ${p.matricula}${p.marcaModel ? ` (${p.marcaModel})` : ""}, ni el Responsable ni l'escalat.`,
+      "Revisa'l i decideix si es dona de baixa.",
+      "",
+      p.enllac,
+      "",
+      "Control d'assegurances",
+    ].join("\n"),
+  };
+}
+
+/** Avís a Administració: baixa demanada des d'un Avís d'un vehicle sense pòlissa desada. */
+export function correuBaixaPendentPolissa(p: { matricula: string; dataBaixa: string; qui: string; enllac: string }): Correu {
+  return {
+    assumpte: `Baixa pendent de pòlissa – ${p.matricula}`,
+    cos: [
+      "Hola,",
+      "",
+      `${p.qui} ha demanat la baixa del ${p.matricula} amb data ${dataCurta(p.dataBaixa)}, però el vehicle no té la pòlissa desada.`,
+      "Puja-la a la fila del vehicle i la baixa s'enviarà a la corredoria.",
+      "",
+      p.enllac,
+      "",
+      "Control d'assegurances",
+    ].join("\n"),
+  };
+}
+
+/** Avís a Administració: la baixa demanada des d'un Avís no s'ha pogut enviar a la corredoria. */
+export function correuBaixaAvisFallida(p: { matricula: string; dataBaixa: string; enllac: string }): Correu {
+  return {
+    assumpte: `No s'ha pogut enviar la baixa – ${p.matricula}`,
+    cos: [
+      "Hola,",
+      "",
+      `S'ha demanat la baixa del ${p.matricula} amb data ${dataCurta(p.dataBaixa)} des d'un avís, però el correu a la corredoria ha fallat.`,
+      "L'avís torna a estar pendent. Fes la baixa des de la fila del vehicle.",
+      "",
+      p.enllac,
+      "",
+      "Control d'assegurances",
+    ].join("\n"),
+  };
+}

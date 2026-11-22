@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { t } from "@/lib/textos";
 import { classificaVehicle, type EstatClassificacio } from "./actions";
-import { BotoAnula, FormulariAssegurat, FormulariBaixa, PendentConfirmar } from "./formulari-baixa";
+import { BotoAnula, FormulariAssegurat, FormulariBaixa, FormulariBaixaPendent, PendentConfirmar } from "./formulari-baixa";
 import { MOTIUS } from "./regles";
 
 export type VehicleFila = {
@@ -33,7 +33,7 @@ type Props = {
   /** Baixa en curs del vehicle, si n'hi ha. `recent` = canvi de fa menys de 2 minuts. */
   baixa: {
     id: string;
-    estat: "enviant" | "enviada" | "anullant";
+    estat: "pendent_polissa" | "enviant" | "enviada" | "anullant";
     data_baixa: string;
     extorn_esperat: number | null;
     recent: boolean;
@@ -88,7 +88,10 @@ export default function FilaVehicle({ vehicle: v, usuaris, centres, capPostvenda
         </p>
       )}
 
-      {baixa && baixa.estat !== "enviada" &&
+      {baixa?.estat === "pendent_polissa" && (
+        <FormulariBaixaPendent baixaId={baixa.id} vehicleId={v.id} dataBaixa={data(baixa.data_baixa)} />
+      )}
+      {baixa && baixa.estat !== "enviada" && baixa.estat !== "pendent_polissa" &&
         (baixa.recent ? (
           <p className="text-sm text-gray-600">{tv.baixa.enviantAra}</p>
         ) : (

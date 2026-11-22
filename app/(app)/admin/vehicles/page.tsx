@@ -25,7 +25,7 @@ export const maxDuration = 60;
 type BaixaEnCurs = {
   id: string;
   vehicle_id: string;
-  estat: "enviant" | "enviada" | "anullant";
+  estat: "pendent_polissa" | "enviant" | "enviada" | "anullant";
   data_baixa: string;
   extorn_esperat: number | null;
   updated_at: string;
@@ -92,7 +92,7 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
       supabase
         .from("baixes")
         .select("id, vehicle_id, estat, data_baixa, extorn_esperat, updated_at")
-        .in("estat", ["enviant", "enviada", "anullant"])
+        .in("estat", ["pendent_polissa", "enviant", "enviada", "anullant"])
         .returns<BaixaEnCurs[]>(),
     ]);
   if (errU) throw errU;

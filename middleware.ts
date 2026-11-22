@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const RUTES_PUBLIQUES = ["/login", "/auth", "/sense-acces"];
+// /avis: respostes des del correu (enllaç personal, sense sessió); /api/avisos: tasca programada (CRON_SECRET).
+const RUTES_PUBLIQUES = ["/login", "/auth", "/sense-acces", "/avis", "/api/avisos"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });

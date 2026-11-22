@@ -50,6 +50,12 @@ Les baixes s'envien des de `assegurances@` amb una aplicació d'Entra pròpia (s
 5. Mentre es prova, posa la teva adreça a `CORREU_PROVES`: tots els correus hi aniran i la corredoria no en rebrà cap.
 6. L'enviament d'estoc a Proassa (pantalla **Vehicles flota**) va a `CORREU_PROASSA` amb còpia a `CORREU_COPIA_ADMIN`; `CORREU_PROVES` també el desvia.
 
+### 6. Publicar a Vercel i avisos diaris
+1. A Vercel (pla Pro: és un ús d'empresa), **Add New → Project** i importa el repositori de GitHub.
+2. **Settings → Environment Variables**: totes les de `.env.local` (les secretes, marcades com a *Sensitive*). `APP_URL` = l'adreça de Vercel (p. ex. `https://assegurances.vercel.app`); `CRON_SECRET` = una clau aleatòria llarga.
+3. A Supabase (**Authentication → URL Configuration**) posa l'adreça de Vercel com a Site URL i afegeix `https://…/**` a les Redirect URLs. A Entra, a l'app d'inici de sessió no cal tocar res (la redirecció és la de Supabase).
+4. `vercel.json` programa la revisió d'avisos (`/api/avisos`) de dilluns a divendres a les 6:00 i 7:00 UTC; només s'executa la que cau a les 8:00 de Madrid (hivern i estiu). Administració també la pot executar a Inici amb **Revisa els avisos ara**. Cada revisió crea com a molt 20 avisos nous (la resta, el dia següent).
+
 ## Desenvolupament
 
 ```bash

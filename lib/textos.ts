@@ -261,6 +261,11 @@ export const t = {
       enviantAra: "S'està enviant el correu…",
       pendent: (que: "baixa" | "anullacio") =>
         `Pendent de confirmar: no sabem si el correu ${que === "baixa" ? "de baixa" : "d'anul·lació"} ha sortit. Mira a Elements enviats d'assegurances@.`,
+      pendentPolissa: (data: string) =>
+        `Baixa demanada des d'un avís amb data ${data}, pendent de la pòlissa. Puja-la i s'enviarà a la corredoria.`,
+      cancelaPendent: "Anul·la aquesta baixa",
+      confirmaCancelaPendent: "Segur que vols anul·lar aquesta baixa? Encara no s'ha enviat res a la corredoria.",
+      okCancelaPendent: "Baixa anul·lada.",
       haSortit: "Sí, ha sortit",
       noHaSortit: "No ha sortit",
     },
