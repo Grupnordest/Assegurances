@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { revisaAvisos } from "@/lib/avisos/servidor";
+import { enviaResumIncidencies, revisaAvisos } from "@/lib/avisos/servidor";
 
 // La revisió envia diversos correus (pla Pro de Vercel: fins a 300 s).
 export const maxDuration = 300;
@@ -22,10 +22,17 @@ export async function GET(request: NextRequest) {
   if (request.nextUrl.searchParams.get("forca") !== "1" && horaMadrid() !== 8) {
     return NextResponse.json({ omesa: true, motiu: "no són les 8 a Madrid" });
   }
+  let revisio: object;
   try {
-    return NextResponse.json(await revisaAvisos());
+    revisio = await revisaAvisos();
   } catch (err) {
     console.error("Error a la revisió d'avisos", err);
-    return NextResponse.json({ error: "error" }, { status: 500 });
+    revisio = { error: "error" };
   }
+  // Al final de la revisió (encara que hagi fallat): resum de les Incidències obertes, un per dia i només si n'hi ha.
+  const resum = await enviaResumIncidencies().catch((err) => {
+    console.error("Error enviant el resum d'incidències", err);
+    return { error: true };
+  });
+  return NextResponse.json({ ...revisio, resum }, { status: "error" in revisio ? 500 : 200 });
 }

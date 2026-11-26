@@ -28,6 +28,7 @@ export const t = {
     estoc: "Estoc",
     vehicles: "Vehicles tot risc",
     flota: "Vehicles flota",
+    incidencies: "Incidències",
     altes: "Demanar alta",
     validar: "Pendents de validar",
     sortir: "Surt",

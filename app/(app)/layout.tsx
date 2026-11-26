@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { t } from "@/lib/textos";
 import { esValidadorDeQualsevol } from "@/lib/altes/regles";
+import { compta } from "@/lib/incidencies/llista";
+import { createClient } from "@/lib/supabase/server";
 import { esAdmin, exigeixUsuariActiu } from "@/lib/usuari-actual";
 
 const enllac = "inline-flex min-h-11 items-center px-2 text-sm text-gray-700 hover:underline";
@@ -8,6 +10,8 @@ const enllac = "inline-flex min-h-11 items-center px-2 text-sm text-gray-700 hov
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Cada pàgina també ho comprova: el layout no es torna a executar en navegar entre pàgines.
   const usuari = await exigeixUsuariActiu();
+  // Comptador del menú: si falla, el menú es mostra igualment sense el número.
+  const incidencies = esAdmin(usuari) ? await compta(await createClient()).catch(() => null) : null;
 
   return (
     <div className="min-h-dvh">
@@ -29,6 +33,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           )}
           {esAdmin(usuari) && (
             <>
+              <Link href="/admin/incidencies" className={enllac}>
+                {t.menu.incidencies}
+                {incidencies ? ` (${incidencies})` : ""}
+              </Link>
               <Link href="/admin/vehicles" className={enllac}>
                 {t.menu.vehicles}
               </Link>

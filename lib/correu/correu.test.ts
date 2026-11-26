@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { destinataris, destinatarisAvis, destinatarisProassa, llegeixConfigCorreu } from "./config";
-import { avisResolucioAlta, correuAlta, correuAnullacio, correuBaixa, correuEstocProassa } from "./plantilles";
+import { avisResolucioAlta, correuAlta, correuAnullacio, correuBaixa, correuEstocProassa, correuResumIncidencies } from "./plantilles";
 
 const ENTORN = {
   AZURE_TENANT_ID: "tenant",
@@ -147,5 +147,29 @@ describe("avisos", () => {
     expect(c.assumpte).toBe("Sense resposta: Assegurança del X – cal una resposta");
     expect(c.cos).toContain("Germán no ha respost");
     expect(c.cos).toContain("Es manté: u?r=mante");
+  });
+});
+
+describe("correuResumIncidencies", () => {
+  it("diu el nombre per tipus, la llista i l'enllaç", () => {
+    const c = correuResumIncidencies({
+      incidencies: [
+        { tipus: "Avís sense resposta", matricula: "1111AAA", data: "2026-11-20" },
+        { tipus: "Avís sense resposta", matricula: "2222BBB", data: "2026-11-21" },
+        { tipus: "Enviament a Proassa fallit", data: "2026-11-25" },
+      ],
+      enllac: "https://app/admin/incidencies",
+    });
+    expect(c.assumpte).toBe("Incidències obertes: 3");
+    expect(c.cos).toContain("- Avís sense resposta: 2");
+    expect(c.cos).toContain("- Enviament a Proassa fallit: 1");
+    expect(c.cos).toContain("20/11/2026  1111AAA  Avís sense resposta");
+    expect(c.cos).toContain("25/11/2026  —  Enviament a Proassa fallit");
+    expect(c.cos).toContain("https://app/admin/incidencies");
+  });
+
+  it("una sola incidència en singular", () => {
+    const c = correuResumIncidencies({ incidencies: [{ tipus: "Vehicle sense Motiu", matricula: "3", data: "2026-11-01" }], enllac: "x" });
+    expect(c.cos).toContain("Hi ha 1 incidència oberta:");
   });
 });

@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { avisDelTestimoni, respon, usuariPotRespondre, type ResultatResposta } from "@/lib/avisos/servidor";
 import type { Resposta } from "@/lib/avisos/regles";
 import { esTestimoni, hashTestimoni } from "@/lib/avisos/testimoni";
@@ -36,6 +37,10 @@ export async function respostaAmbSessio(_prev: EstatResposta, formData: FormData
   const avisId = formData.get("avis");
   const { resposta, data } = llegeix(formData);
   if (typeof avisId !== "string" || !/^[0-9a-f-]{36}$/i.test(avisId) || !resposta) return { error: "Resposta no vàlida." };
-  if (!(await usuariPotRespondre(avisId, usuari.id, esAdmin(usuari)))) return { error: "No tens permís per fer aquesta acció." };
-  return respon(avisId, usuari.id, resposta, data);
+  const admin = esAdmin(usuari);
+  if (!(await usuariPotRespondre(avisId, usuari.id, admin))) return { error: "No tens permís per fer aquesta acció." };
+  const r = await respon(avisId, usuari.id, resposta, data, admin);
+  // Administració: actualitza la safata d'Incidències i el comptador del menú.
+  if (admin && "ok" in r) revalidatePath("/admin/incidencies");
+  return r;
 }

@@ -202,15 +202,23 @@ export function correuAvis(p: {
   };
 }
 
-/** Avís a Administració: un Avís ha quedat sense resposta després de l'escalat (Excepció). */
-export function correuExcepcioAvis(p: { matricula: string; marcaModel: string | null; enllac: string }): Correu {
+/** Resum diari a Administració de les Incidències obertes (FR-17). `data` en ISO; `tipus` és el nom visible. */
+export function correuResumIncidencies(p: {
+  incidencies: { tipus: string; matricula?: string; data: string }[];
+  enllac: string;
+}): Correu {
+  const n = p.incidencies.length;
+  const perTipus = new Map<string, number>();
+  for (const i of p.incidencies) perTipus.set(i.tipus, (perTipus.get(i.tipus) ?? 0) + 1);
   return {
-    assumpte: `Excepció: avís sense resposta – ${p.matricula}`,
+    assumpte: `Incidències obertes: ${n}`,
     cos: [
       "Hola,",
       "",
-      `Ningú ha respost l'avís del ${p.matricula}${p.marcaModel ? ` (${p.marcaModel})` : ""}, ni el Responsable ni l'escalat.`,
-      "Revisa'l i decideix si es dona de baixa.",
+      n === 1 ? "Hi ha 1 incidència oberta:" : `Hi ha ${n} incidències obertes:`,
+      ...[...perTipus].map(([t, c]) => `- ${t}: ${c}`),
+      "",
+      ...p.incidencies.map((i) => `${dataCurta(i.data.slice(0, 10))}  ${i.matricula ?? "—"}  ${i.tipus}`),
       "",
       p.enllac,
       "",

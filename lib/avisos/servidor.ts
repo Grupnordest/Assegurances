@@ -6,10 +6,11 @@ import {
   correuBaixa,
   correuBaixaAvisFallida,
   correuBaixaPendentPolissa,
-  correuExcepcioAvis,
+  correuResumIncidencies,
   type Correu,
 } from "../correu/plantilles";
 import { avuiMadrid } from "../dies-laborables";
+import { llistaIncidencies, NOM_TIPUS } from "../incidencies/llista";
 import { descarregaPdf } from "../documents";
 import { extornEsperat } from "../extorns/calcula";
 import { createAdminClient } from "../supabase/admin";
@@ -106,7 +107,6 @@ export async function revisaAvisos(ara = new Date()): Promise<ResultatRevisio> {
   const r: ResultatRevisio = { creats: 0, escalats: 0, excepcions: 0, errors: 0 };
   const usuaris = await usuarisActius(admin);
   const admins = [...usuaris.values()].filter((u) => u.admin);
-  const fitxa = `${urlApp()}/admin/vehicles?veure=tots`;
 
   const [{ data: vehicles, error: errV }, { data: baixes, error: errB }, { data: avisos, error: errA }] = await Promise.all([
     admin
@@ -178,7 +178,7 @@ export async function revisaAvisos(ara = new Date()): Promise<ResultatRevisio> {
           .select("id");
         if (error) throw error;
         if (!ok?.length) continue;
-        for (const u of admins) await envia(correuExcepcioAvis({ matricula: v.matricula, marcaModel: v.marca_model, enllac: fitxa }), u);
+        // Ja no s'envia cap correu solt: surt a Incidències i al resum diari.
         r.excepcions++;
       }
     } catch (err) {
@@ -296,7 +296,13 @@ const M = {
 const curta = (s: string) => s.split("-").reverse().join("/");
 
 /** Resol un Avís en nom d'un usuari (des del correu o des de la safata). */
-export async function respon(avisId: string, usuariId: string, resposta: Resposta, data: string | null): Promise<ResultatResposta> {
+export async function respon(
+  avisId: string,
+  usuariId: string,
+  resposta: Resposta,
+  data: string | null,
+  esAdministracio = false,
+): Promise<ResultatResposta> {
   const admin = createAdminClient();
   const avui = avuiMadrid();
   try {
@@ -311,7 +317,8 @@ export async function respon(avisId: string, usuariId: string, resposta: Respost
         vehicles_assegurats: { id: string; matricula: string; prima_total: number | null; polissa_path: string | null };
       }>();
     if (error) throw error;
-    if (a.estat !== "pendent" || !respostesDe(a.tipus).includes(resposta)) return { error: M.resolt };
+    const obert = a.estat === "pendent" || (a.estat === "excepcio" && esAdministracio);
+    if (!obert || !respostesDe(a.tipus).includes(resposta)) return { error: M.resolt };
     const v = a.vehicles_assegurats;
 
     if (resposta === "mante" || resposta === "mante_fins") {
@@ -384,4 +391,50 @@ async function avisaAdmins(admin: Admin, correu: Correu): Promise<void> {
   } catch (err) {
     console.error("No s'ha pogut avisar Administració", correu.assumpte, err);
   }
+}
+
+/** Administració tanca un Avís en excepció amb un comentari (Incidències). */
+export async function tancaExcepcio(avisId: string, usuariId: string, comentari: string): Promise<ResultatResposta> {
+  const { error } = await createAdminClient().rpc("tanca_excepcio_avis", {
+    p_avis: avisId,
+    p_usuari: usuariId,
+    p_comentari: comentari,
+  });
+  if (!error) return { ok: "Fet: incidència tancada." };
+  if (error.message.includes("avis_resolt")) return { error: M.resolt };
+  if (error.message.includes("comentari")) return { error: "Escriu un comentari." };
+  console.error("Error tancant l'excepció", avisId, error);
+  return { error: M.generic };
+}
+
+/** Dilluns a divendres, a Madrid. */
+function esDiaLaborable(ara: Date): boolean {
+  const dia = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "Europe/Madrid" }).format(ara);
+  return dia !== "Sat" && dia !== "Sun";
+}
+
+/**
+ * Resum diari de les Incidències obertes a cada Administració. Un sol cop per dia laborable i només si n'hi ha:
+ * es reclama el dia a `resums_incidencies` abans d'enviar (si no surt cap correu, s'allibera per reintentar).
+ */
+export async function enviaResumIncidencies(ara = new Date()): Promise<{ enviats: number; incidencies: number }> {
+  if (!esDiaLaborable(ara)) return { enviats: 0, incidencies: 0 };
+  const admin = createAdminClient();
+  const incidencies = await llistaIncidencies(admin, ara);
+  if (incidencies.length === 0) return { enviats: 0, incidencies: 0 };
+  const dia = avuiMadrid(ara);
+  const { error } = await admin.from("resums_incidencies").insert({ dia });
+  if (error) {
+    if (error.code === "23505") return { enviats: 0, incidencies: incidencies.length }; // ja enviat avui
+    throw error;
+  }
+  const correu = correuResumIncidencies({
+    incidencies: incidencies.map((i) => ({ tipus: NOM_TIPUS[i.tipus], matricula: i.matricula, data: avuiMadrid(new Date(i.data)) })),
+    enllac: `${urlApp()}/admin/incidencies`,
+  });
+  let enviats = 0;
+  const usuaris = await usuarisActius(admin);
+  for (const u of usuaris.values()) if (u.admin && (await envia(correu, u))) enviats++;
+  if (enviats === 0) await admin.from("resums_incidencies").delete().eq("dia", dia);
+  return { enviats, incidencies: incidencies.length };
 }
