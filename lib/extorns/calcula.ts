@@ -34,3 +34,27 @@ export function extornEsperat(primaAnual: number | null, dataBaixa: string): num
   if (primaAnual === null || !Number.isFinite(primaAnual) || primaAnual <= 0) return null;
   return Math.round((primaAnual * diesNoConsumits(dataBaixa) * 100) / 365) / 100;
 }
+
+/** Tolerància de la conciliació d'extorns (en euros, inclosa). */
+export const TOLERANCIA_EXTORN = 1;
+
+/**
+ * Prima anual equivalent d'un Rebut d'alta (FR-23/FR-24): el rebut cobreix des de `inici` (inclòs)
+ * fins a `fi` (exclòs), així que prima anual = prima × 365 ÷ dies del rebut. Arrodonit a cèntims.
+ * null si la prima no és positiva o el període no té cap dia.
+ */
+export function primaAnualDeRebut(prima: number, inici: string, fi: string): number | null {
+  const dies = Math.round((aUtc(fi) - aUtc(inici)) / DIA);
+  if (!Number.isFinite(prima) || prima <= 0 || !(dies > 0)) return null;
+  return Math.round((prima * 365 * 100) / dies) / 100;
+}
+
+/**
+ * L'extorn liquidat (import del rebut, negatiu) quadra amb l'esperat si la diferència en valor absolut
+ * és ≤ 1 €. Un import positiu o zero no quadra mai. Treballa en cèntims.
+ */
+export function quadra(esperat: number, liquidat: number): boolean {
+  if (!(liquidat < 0)) return false;
+  const c = (x: number) => Math.round(Math.abs(x) * 100);
+  return Math.abs(c(esperat) - c(liquidat)) <= TOLERANCIA_EXTORN * 100;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diesNoConsumits, extornEsperat, fiPeriodeCartera } from "./calcula";
+import { diesNoConsumits, extornEsperat, fiPeriodeCartera, primaAnualDeRebut, quadra } from "./calcula";
 
 describe("fiPeriodeCartera", () => {
   it("el pròxim 04/06 o 04/12 estrictament posterior", () => {
@@ -29,5 +29,33 @@ describe("extornEsperat", () => {
     expect(extornEsperat(null, "2026-11-25")).toBe(null);
     expect(extornEsperat(0, "2026-11-25")).toBe(null);
     expect(extornEsperat(Number.NaN, "2026-11-25")).toBe(null);
+  });
+});
+
+describe("primaAnualDeRebut", () => {
+  it("prima × 365 ÷ dies del rebut (exemple de la spec: 162,81 € del 31/03 al 04/06)", () => {
+    expect(primaAnualDeRebut(162.81, "2026-03-31", "2026-06-04")).toBe(914.24);
+    expect(extornEsperat(914.24, "2026-04-13")).toBe(130.25);
+  });
+
+  it("sense prima o sense dies → null", () => {
+    expect(primaAnualDeRebut(0, "2026-03-31", "2026-06-04")).toBe(null);
+    expect(primaAnualDeRebut(-5, "2026-03-31", "2026-06-04")).toBe(null);
+    expect(primaAnualDeRebut(100, "2026-06-04", "2026-06-04")).toBe(null);
+  });
+});
+
+describe("quadra", () => {
+  it("tolerància de ±1 € inclosa sobre l'import negatiu de l'extorn", () => {
+    expect(quadra(130.25, -130.24)).toBe(true);
+    expect(quadra(130.25, -131.25)).toBe(true);
+    expect(quadra(130.25, -129.25)).toBe(true);
+    expect(quadra(130.25, -131.26)).toBe(false);
+    expect(quadra(130.25, -129.24)).toBe(false);
+  });
+
+  it("un import positiu o zero no quadra mai", () => {
+    expect(quadra(130.25, 130.25)).toBe(false);
+    expect(quadra(0.5, 0)).toBe(false);
   });
 });

@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { construeixIncidencies, type Fonts } from "./llista";
+import { construeixIncidencies, esPerReclamar, type Fonts } from "./llista";
 
 const ARA = new Date("2026-11-26T09:00:00Z");
 const fa = (min: number) => new Date(ARA.getTime() - min * 60_000).toISOString();
-const buit: Fonts = { avisos: [], baixes: [], altesEnviant: [], darrerFlota: null, senseMotiu: [] };
+const buit: Fonts = { avisos: [], baixes: [], altesEnviant: [], darrerFlota: null, senseMotiu: [], rebuts: [] };
 const baixa = (p: Partial<Fonts["baixes"][number]>): Fonts["baixes"][number] => ({
+  id: "b1",
   vehicle_id: "v1",
   estat: "enviada",
+  data_baixa: "2026-11-20",
+  extorn_esperat: 100,
+  extorn_liquidat: null,
+  liquidada_at: null,
+  reclamada_at: null,
   created_at: fa(1000),
   updated_at: fa(1000),
   matricula: "1111AAA",
@@ -89,5 +95,64 @@ describe("construeixIncidencies", () => {
       ARA,
     );
     expect(r.map((i) => i.tipus)).toEqual(["baixa_pendent_polissa", "alta_incerta", "flota_fallida"]);
+  });
+});
+
+describe("extorns i rebuts", () => {
+  it("extorn pendent a partir dels 60 dies de la data de baixa", () => {
+    // ARA = 26/11/2026; 60 dies abans = 27/09/2026.
+    expect(construeixIncidencies({ ...buit, baixes: [baixa({ data_baixa: "2026-09-28" })] }, ARA)).toEqual([]);
+    expect(construeixIncidencies({ ...buit, baixes: [baixa({ data_baixa: "2026-09-27" })] }, ARA)).toMatchObject([
+      { tipus: "extorn_pendent", baixaId: "b1", matricula: "1111AAA", perReclamar: true },
+    ]);
+    // Reclamada fa 3 dies: continua pendent però no es pot tornar a reclamar encara.
+    expect(
+      construeixIncidencies({ ...buit, baixes: [baixa({ data_baixa: "2026-09-27", reclamada_at: fa(3 * 24 * 60) })] }, ARA),
+    ).toMatchObject([{ tipus: "extorn_pendent", perReclamar: false }]);
+    // Amb un extorn enllaçat (encara que no quadri, o positiu) ja no és pendent sinó incorrecte.
+    expect(
+      construeixIncidencies({ ...buit, baixes: [baixa({ data_baixa: "2026-01-01", extorn_liquidat: -20 })] }, ARA),
+    ).toMatchObject([{ tipus: "extorn_incorrecte" }]);
+    // Ja liquidada, anul·lada o fallida: res.
+    expect(
+      construeixIncidencies({ ...buit, baixes: [baixa({ data_baixa: "2026-01-01", liquidada_at: fa(10), extorn_liquidat: 100 })] }, ARA),
+    ).toEqual([]);
+    expect(construeixIncidencies({ ...buit, baixes: [baixa({ data_baixa: "2026-01-01", estat: "anullada" })] }, ARA)).toEqual([]);
+  });
+
+  it("extorn incorrecte amb les dues xifres", () => {
+    const r = construeixIncidencies({ ...buit, baixes: [baixa({ extorn_esperat: 130.25, extorn_liquidat: 120 })] }, ARA);
+    expect(r).toMatchObject([{ tipus: "extorn_incorrecte", baixaId: "b1" }]);
+    expect(r[0].descripcio).toContain("130,25");
+    expect(r[0].descripcio).toContain("120,00");
+  });
+
+  it("rebuts sense casar: extorn no identificat i emissió sense vehicle", () => {
+    const rebut = (p: Partial<Fonts["rebuts"][number]>): Fonts["rebuts"][number] => ({
+      id: "r1",
+      num_rebut: "100000001-A",
+      tipus: "extorn",
+      matricula: "2222BBB",
+      prima_total: -50,
+      inici: "2026-04-01",
+      created_at: fa(100),
+      vehicle_id: null,
+      baixa_id: null,
+      ...p,
+    });
+    expect(construeixIncidencies({ ...buit, rebuts: [rebut({})] }, ARA)).toMatchObject([{ tipus: "extorn_no_identificat", rebutId: "r1" }]);
+    expect(construeixIncidencies({ ...buit, rebuts: [rebut({ tipus: "emissio", prima_total: 50 })] }, ARA)).toMatchObject([
+      { tipus: "rebut_sense_vehicle" },
+    ]);
+    expect(construeixIncidencies({ ...buit, rebuts: [rebut({ tipus: "emissio", vehicle_id: "v1" })] }, ARA)).toEqual([]);
+    expect(construeixIncidencies({ ...buit, rebuts: [rebut({ baixa_id: "b1" })] }, ARA)).toEqual([]);
+  });
+
+  it("una baixa reclamada fa menys de 15 dies no es torna a reclamar", () => {
+    const b = baixa({ data_baixa: "2026-01-01" });
+    expect(esPerReclamar(b, ARA)).toBe(true);
+    expect(esPerReclamar({ ...b, reclamada_at: fa(14 * 24 * 60) }, ARA)).toBe(false);
+    expect(esPerReclamar({ ...b, reclamada_at: fa(15 * 24 * 60) }, ARA)).toBe(true);
+    expect(esPerReclamar(baixa({ data_baixa: "2026-11-01" }), ARA)).toBe(false);
   });
 });

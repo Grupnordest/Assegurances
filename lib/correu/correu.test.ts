@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { destinataris, destinatarisAvis, destinatarisProassa, llegeixConfigCorreu } from "./config";
-import { avisResolucioAlta, correuAlta, correuAnullacio, correuBaixa, correuEstocProassa, correuResumIncidencies } from "./plantilles";
+import { avisResolucioAlta, correuAlta, correuAnullacio, correuBaixa, correuEstocProassa, correuReclamacioExtorns, correuResumIncidencies } from "./plantilles";
 
 const ENTORN = {
   AZURE_TENANT_ID: "tenant",
@@ -171,5 +171,33 @@ describe("correuResumIncidencies", () => {
   it("una sola incidència en singular", () => {
     const c = correuResumIncidencies({ incidencies: [{ tipus: "Vehicle sense Motiu", matricula: "3", data: "2026-11-01" }], enllac: "x" });
     expect(c.cos).toContain("Hi ha 1 incidència oberta:");
+  });
+});
+
+describe("correuReclamacioExtorns", () => {
+  it("llista matrícula, pòlissa, data de baixa i import esperat", () => {
+    const c = correuReclamacioExtorns({
+      files: [
+        { matricula: "1234ABC", polissa: "500000001", dataBaixa: "2026-04-13", esperat: 130.25 },
+        { matricula: "5678XYZ", polissa: null, dataBaixa: "2026-05-02", esperat: null },
+      ],
+      signatura: "Nuri",
+    });
+    expect(c.assumpte).toBe("Extorns pendents flota tot risc (2)");
+    expect(c.cos).toBe(
+      [
+        "Bones,",
+        "",
+        "No ens consten liquidats els extorns d'aquestes 2 baixes:",
+        "",
+        "- 1234ABC · Pòlissa 500000001 · Baixa 13/04/2026 · Extorn esperat 130,25 €",
+        "- 5678XYZ · Pòlissa — · Baixa 02/05/2026 · Extorn esperat pendent de prima",
+        "",
+        "Us agrairíem que ens digueu quan es liquidaran.",
+        "",
+        "Salutacions",
+        "Nuri",
+      ].join("\n"),
+    );
   });
 });

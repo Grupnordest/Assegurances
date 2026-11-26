@@ -65,6 +65,7 @@ export function missatgeErrorVehicles(error: { code?: string; message?: string }
   if (m.includes("sense_baixa")) return e.senseBaixa;
   if (m.includes("massa_tard")) return e.massaTard;
   if (m.includes("pendent_confirmar")) return e.pendentConfirmar;
+  if (m.includes("extorn_rebut")) return e.extornRebut;
   if (error.code === "23505") return e.jaBaixa;
   return e.generic;
 }

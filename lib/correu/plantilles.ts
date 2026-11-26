@@ -202,6 +202,38 @@ export function correuAvis(p: {
   };
 }
 
+/** Import en euros amb coma decimal ("130,25 €"). */
+const euros = (x: number) => `${x.toFixed(2).replace(".", ",")} €`;
+
+/** Reclamació a la Corredoria dels extorns pendents (FR-25): una línia per baixa. */
+export function correuReclamacioExtorns(p: {
+  files: { matricula: string; polissa: string | null; dataBaixa: string; esperat: number | null }[];
+  signatura: string;
+}): Correu {
+  return {
+    assumpte: `Extorns pendents flota tot risc (${p.files.length})`,
+    cos: [
+      "Bones,",
+      "",
+      p.files.length === 1
+        ? "No ens consta liquidat l'extorn d'aquesta baixa:"
+        : `No ens consten liquidats els extorns d'aquestes ${p.files.length} baixes:`,
+      "",
+      ...p.files.map(
+        (f) =>
+          `- ${f.matricula} · Pòlissa ${f.polissa ?? "—"} · Baixa ${dataCurta(f.dataBaixa)} · Extorn esperat ${
+            f.esperat === null ? "pendent de prima" : euros(f.esperat)
+          }`,
+      ),
+      "",
+      "Us agrairíem que ens digueu quan es liquidaran.",
+      "",
+      "Salutacions",
+      p.signatura,
+    ].join("\n"),
+  };
+}
+
 /** Resum diari a Administració de les Incidències obertes (FR-17). `data` en ISO; `tipus` és el nom visible. */
 export function correuResumIncidencies(p: {
   incidencies: { tipus: string; matricula?: string; data: string }[];

@@ -36,6 +36,9 @@ type Props = {
     estat: "pendent_polissa" | "enviant" | "enviada" | "anullant";
     data_baixa: string;
     extorn_esperat: number | null;
+    /** Extorn liquidat per la Corredoria (FR-24); `liquidada_at` nul si encara no quadra. */
+    extorn_liquidat: number | null;
+    liquidada_at: string | null;
     recent: boolean;
   } | null;
   /** El vehicle ja té la pòlissa AXA (PDF) desada. */
@@ -44,6 +47,7 @@ type Props = {
 
 const camp = "w-full rounded-md border px-3 py-2";
 const eur = new Intl.NumberFormat("ca-ES", { style: "currency", currency: "EUR" });
+const dataHoraCurta = new Intl.DateTimeFormat("ca-ES", { dateStyle: "short", timeZone: "Europe/Madrid" });
 const data = (s: string | null) => (s ? s.split("-").reverse().join("/") : "—");
 
 export default function FilaVehicle({ vehicle: v, usuaris, centres, capPostvenda, avui, baixa, tePolissa }: Props) {
@@ -107,8 +111,16 @@ export default function FilaVehicle({ vehicle: v, usuaris, centres, capPostvenda
             {v.estat === "baixa_enviada" ? tv.baixa.enviada(data(baixa.data_baixa)) : tv.baixa.donat(data(baixa.data_baixa))}
             {" · "}
             {tv.baixa.extorn(baixa.extorn_esperat !== null ? eur.format(baixa.extorn_esperat) : null)}
+            {baixa.extorn_liquidat !== null && (
+              <>
+                {" · "}
+                {baixa.liquidada_at
+                  ? tv.baixa.liquidat(eur.format(baixa.extorn_liquidat), dataHoraCurta.format(new Date(baixa.liquidada_at)))
+                  : tv.baixa.noQuadra(eur.format(baixa.extorn_liquidat))}
+              </>
+            )}
           </p>
-          {v.estat === "baixa_enviada" && baixa.data_baixa > avui && <BotoAnula vehicleId={v.id} matricula={v.matricula} />}
+          {v.estat === "baixa_enviada" && baixa.data_baixa > avui && baixa.extorn_liquidat === null && <BotoAnula vehicleId={v.id} matricula={v.matricula} />}
         </div>
       )}
 

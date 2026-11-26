@@ -29,6 +29,7 @@ export const t = {
     vehicles: "Vehicles tot risc",
     flota: "Vehicles flota",
     incidencies: "Incidències",
+    rebuts: "Rebuts",
     altes: "Demanar alta",
     validar: "Pendents de validar",
     sortir: "Surt",
@@ -254,6 +255,9 @@ export const t = {
       enviada: (data: string) => `Baixa enviada amb data ${data}`,
       donat: (data: string) => `Donat de baixa el ${data}`,
       extorn: (eur: string | null) => (eur ? `Extorn esperat: ${eur}` : "Extorn esperat: pendent de prima"),
+      liquidat: (eur: string, data: string) => `Extorn liquidat ${eur} (${data})`,
+      noQuadra: (eur: string) => `Extorn rebut de ${eur} que no quadra: pendent de revisar a Incidències`,
+      tancatsRecents: "Tancats els últims 30 dies",
       anula: "Anul·lar la baixa",
       anulant: "Anul·lant…",
       confirmaAnula: (mat: string) => `Segur que vols anul·lar la baixa del ${mat}? S'enviarà un correu d'anul·lació a la corredoria.`,
@@ -323,6 +327,7 @@ export const t = {
       dataBaixa: "Tria una data de baixa d'avui o posterior.",
       polissa: "Adjunta la pòlissa AXA del vehicle (PDF).",
       pendentConfirmar: "Hi ha un enviament pendent de confirmar per a aquest vehicle. Resol-lo primer.",
+      extornRebut: "La corredoria ja ha liquidat l'extorn d'aquesta baixa: no es pot anul·lar.",
       correuIncert:
         "Microsoft no ha respost i no sabem si el correu ha sortit. Mira a Elements enviats d'assegurances@ i indica-ho a la fila del vehicle.",
       jaBaixa: "Aquest vehicle ja té la baixa enviada.",
@@ -430,6 +435,88 @@ export const t = {
       capResultat: (q: string) => `${q} no és a l'estoc.`,
       massa: "Hi ha més de 50 resultats: afina la cerca.",
       columnes: { matricula: "Matrícula", marca: "Marca", model: "Model", color: "Color", dies: "Dies en estoc" },
+    },
+  },
+  rebuts: {
+    titol: "Rebuts de la corredoria",
+    ajuda:
+      "Puja els Excel de rebuts que envia la corredoria (un o diversos alhora). Cada línia es desa una sola vegada i es casa per matrícula: les emissions donen la prima al vehicle i els extorns tanquen la baixa si l'import quadra (±1 €).",
+    boto: "Importa els rebuts",
+    carregant: "Important…",
+    recasades: (n: number) => `${n} línies anteriors sense casar s'han casat ara.`,
+    massaGran: "Els fitxers sumen massa (màxim 4 MB en total).",
+    resumFitxer: (r: { importades: number; repetides: number; ignorades: number }) =>
+      `${r.importades} línies importades, ${r.repetides} ja importades abans, ${r.ignorades} de la pòlissa mare ignorades.`,
+    detallFitxer: (r: { liquidats: number; incorrectes: number; no_identificats: number; sense_vehicle: number; primes: number }) =>
+      [
+        r.primes ? `${r.primes} primes desades` : null,
+        r.liquidats ? `${r.liquidats} extorns conciliats` : null,
+        r.incorrectes ? `${r.incorrectes} extorns que no quadren` : null,
+        r.no_identificats ? `${r.no_identificats} extorns no identificats` : null,
+        r.sense_vehicle ? `${r.sense_vehicle} rebuts sense vehicle` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    desconegudes: (n: string[]) =>
+      `No s'han importat ${n.length} línies amb una Clase que l'eina no coneix (${n.join(", ")}). Parla-ho abans amb qui manté l'eina.`,
+    ultimes: "Últimes línies importades",
+    capLinia: "Encara no s'ha importat cap rebut.",
+    columnes: {
+      rebut: "Rebut",
+      matricula: "Matrícula",
+      clase: "Clase",
+      cobertura: "Cobertura",
+      import: "Prima total",
+      casament: "Casament",
+      fitxer: "Fitxer",
+    },
+    casament: (r: { tipus: string; vehicle: boolean; baixa: boolean }) =>
+      r.tipus === "emissio"
+        ? r.vehicle
+          ? "Emissió del vehicle"
+          : "Sense vehicle"
+        : r.baixa
+          ? "Extorn de la baixa"
+          : "Extorn no identificat",
+    errors: {
+      permis: "No tens permís per fer aquesta acció.",
+      senseFitxer: "Tria almenys un fitxer.",
+      massaFitxers: (max: number) => `Com a molt ${max} fitxers alhora.`,
+      mida: "El fitxer és massa gran (màxim 4 MB).",
+      tipus: "El fitxer ha de ser un Excel (.xls o .xlsx).",
+      illegible: "No s'ha pogut llegir el fitxer. Comprova que és l'Excel de rebuts de la corredoria.",
+      senseCapcaleres: "No s'ha trobat la capçalera (Recibo … Datos adicionales).",
+      massaFiles: (max: number) => `El fitxer té més de ${max} files.`,
+      format: (falten: string[]) => `Al fitxer li falten aquestes columnes: ${falten.join(", ")}.`,
+      dades: (fila: number, camp: string) => `Fila ${fila}: el camp «${camp}» no és vàlid. No s'ha importat res d'aquest fitxer.`,
+      buit: "El fitxer no té cap línia de vehicle.",
+      generic: "No s'ha pogut importar el fitxer. Torna-ho a provar.",
+    },
+  },
+  extorns: {
+    reclama: "Reclamar extorns pendents",
+    reclamant: "Enviant…",
+    confirmaReclama: (n: number) => `S'enviarà un correu a la corredoria reclamant ${n} extorns pendents. Continuar?`,
+    reclamats: (n: number) => `Correu enviat a la corredoria amb ${n} extorns pendents.`,
+    capPerReclamar: "No hi ha cap extorn per reclamar (els reclamats fa menys de 15 dies no es tornen a incloure).",
+    perReclamar: (n: number) => `${n} per reclamar ara.`,
+    acceptaTitol: "Acceptar l'extorn amb un comentari (tanca la baixa)",
+    accepta: "Acceptar l'extorn",
+    acceptant: "Desant…",
+    acceptat: "Extorn acceptat. La baixa queda liquidada.",
+    descartaTitol: "Descartar la línia amb un comentari (no s'esborra)",
+    descarta: "Descartar",
+    descartat: "Línia descartada.",
+    errors: {
+      permis: "No tens permís per fer aquesta acció.",
+      dades: "Incidència no vàlida.",
+      comentari: "Escriu un comentari.",
+      estat: "Aquesta baixa ja no té cap extorn pendent d'acceptar.",
+      correu: "No s'ha pogut enviar el correu a la corredoria. No s'ha marcat cap extorn com a reclamat.",
+      correuIncert:
+        "No se sap si el correu de reclamació ha sortit. Mira a Elements enviats d'assegurances@: les baixes queden marcades com a reclamades.",
+      estatRebut: "Aquesta línia de rebut ja està casada o descartada.",
+      generic: "No s'ha pogut fer l'acció. Torna-ho a provar.",
     },
   },
 };

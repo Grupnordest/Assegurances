@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { sumaDies } from "../avisos/regles";
+import { avuiMadrid } from "../dies-laborables";
 
 /** Incidències (PRD FR-17): situacions que l'eina no resol sola, derivades de l'estat de les taules. */
 export type TipusIncidencia =
@@ -7,7 +9,11 @@ export type TipusIncidencia =
   | "baixa_fallida"
   | "alta_incerta"
   | "flota_fallida"
-  | "sense_motiu";
+  | "sense_motiu"
+  | "extorn_pendent"
+  | "extorn_incorrecte"
+  | "extorn_no_identificat"
+  | "rebut_sense_vehicle";
 
 export type Incidencia = {
   tipus: TipusIncidencia;
@@ -19,6 +25,14 @@ export type Incidencia = {
   enllac?: string;
   avisId?: string;
   tipusAvis?: string;
+  /** Baixa afectada (extorn pendent o incorrecte). */
+  baixaId?: string;
+  /** Instant de la darrera reclamació (extorn pendent). */
+  reclamadaAt?: string | null;
+  /** Extorn pendent que es pot incloure ara a la reclamació. */
+  perReclamar?: boolean;
+  /** Línia de rebut sense casar (es pot descartar amb un comentari). */
+  rebutId?: string;
 };
 
 export const NOM_TIPUS: Record<TipusIncidencia, string> = {
@@ -28,7 +42,42 @@ export const NOM_TIPUS: Record<TipusIncidencia, string> = {
   alta_incerta: "Alta amb enviament incert",
   flota_fallida: "Enviament a Proassa fallit",
   sense_motiu: "Vehicle sense Motiu",
+  extorn_pendent: "Extorn pendent",
+  extorn_incorrecte: "Extorn incorrecte",
+  extorn_no_identificat: "Extorn no identificat",
+  rebut_sense_vehicle: "Rebut sense vehicle",
 };
+
+/** Dies després de la data de baixa a partir dels quals un extorn no liquidat és pendent (FR-25). */
+export const DIES_EXTORN_PENDENT = 60;
+/** Una baixa reclamada fa menys d'això no es torna a incloure a la reclamació. */
+export const DIES_ENTRE_RECLAMACIONS = 15;
+
+const eur = new Intl.NumberFormat("ca-ES", { style: "currency", currency: "EUR" });
+const dataCurta = (d: string) => d.split("-").reverse().join("/");
+
+type BaixaExtorn = {
+  estat: string;
+  data_baixa: string;
+  extorn_liquidat: number | null;
+  liquidada_at: string | null;
+};
+
+/** Baixa enviada sense cap extorn liquidat 60 dies (o més) després de la data de baixa. */
+export function esExtornPendent(b: BaixaExtorn, ara: Date = new Date()): boolean {
+  return (
+    b.estat === "enviada" &&
+    b.liquidada_at === null &&
+    b.extorn_liquidat === null &&
+    avuiMadrid(ara) >= sumaDies(b.data_baixa, DIES_EXTORN_PENDENT)
+  );
+}
+
+/** Extorn pendent que es pot incloure a la reclamació (no reclamat els darrers 15 dies). */
+export function esPerReclamar(b: BaixaExtorn & { reclamada_at: string | null }, ara: Date = new Date()): boolean {
+  if (!esExtornPendent(b, ara)) return false;
+  return b.reclamada_at === null || new Date(b.reclamada_at).getTime() <= ara.getTime() - DIES_ENTRE_RECLAMACIONS * 86_400_000;
+}
 
 /** Un enviament en curs més antic que això es considera incert. */
 export const MINUTS_INCERT = 15;
@@ -47,12 +96,30 @@ export type Fonts = {
   }[];
   /** Totes les baixes (per saber quina és la darrera de cada vehicle). */
   baixes: {
+    id: string;
     vehicle_id: string;
     estat: string;
+    data_baixa: string;
+    extorn_esperat: number | null;
+    extorn_liquidat: number | null;
+    liquidada_at: string | null;
+    reclamada_at: string | null;
     created_at: string;
     updated_at: string;
     matricula: string;
     estat_vehicle: string;
+  }[];
+  /** Línies de rebut sense casar: emissions sense vehicle i extorns sense baixa. */
+  rebuts: {
+    id: string;
+    num_rebut: string;
+    tipus: string;
+    matricula: string;
+    prima_total: number;
+    inici: string;
+    created_at: string;
+    vehicle_id: string | null;
+    baixa_id: string | null;
   }[];
   altesEnviant: { id: string; matricula: string; updated_at: string }[];
   darrerFlota: { estat: string; created_at: string } | null;
@@ -152,12 +219,64 @@ export function construeixIncidencies(f: Fonts, ara: Date = new Date()): Inciden
     });
   }
 
+  for (const b of f.baixes) {
+    if (b.estat !== "enviada" || b.liquidada_at !== null) continue;
+    if (b.extorn_liquidat !== null) {
+      r.push({
+        tipus: "extorn_incorrecte",
+        vehicle: b.vehicle_id,
+        matricula: b.matricula,
+        data: b.updated_at,
+        descripcio: `Baixa del ${dataCurta(b.data_baixa)}: extorn esperat ${
+          b.extorn_esperat === null ? "pendent de prima" : eur.format(b.extorn_esperat)
+        }, liquidat ${eur.format(b.extorn_liquidat)}. La diferència és de més d'1 €.`,
+        baixaId: b.id,
+      });
+    } else if (esExtornPendent(b, ara)) {
+      r.push({
+        tipus: "extorn_pendent",
+        vehicle: b.vehicle_id,
+        matricula: b.matricula,
+        data: `${sumaDies(b.data_baixa, DIES_EXTORN_PENDENT)}T00:00:00Z`,
+        descripcio: `Baixa del ${dataCurta(b.data_baixa)} sense extorn liquidat després de ${DIES_EXTORN_PENDENT} dies (esperat: ${
+          b.extorn_esperat === null ? "pendent de prima" : eur.format(b.extorn_esperat)
+        }).${b.reclamada_at ? ` Reclamat el ${dataCurta(avuiMadrid(new Date(b.reclamada_at)))}.` : ""}`,
+        baixaId: b.id,
+        reclamadaAt: b.reclamada_at,
+        perReclamar: esPerReclamar(b, ara),
+      });
+    }
+  }
+
+  for (const x of f.rebuts) {
+    if (x.tipus === "extorn" && x.baixa_id === null) {
+      r.push({
+        tipus: "extorn_no_identificat",
+        vehicle: x.vehicle_id ?? undefined,
+        matricula: x.matricula,
+        data: x.created_at,
+        rebutId: x.id,
+        descripcio: `Rebut ${x.num_rebut}: extorn de ${eur.format(Math.abs(x.prima_total))} amb data ${dataCurta(x.inici)} sense cap baixa enviada pendent de liquidar.`,
+        enllac: "/admin/rebuts",
+      });
+    } else if (x.tipus === "emissio" && x.vehicle_id === null) {
+      r.push({
+        tipus: "rebut_sense_vehicle",
+        matricula: x.matricula,
+        data: x.created_at,
+        rebutId: x.id,
+        descripcio: `Rebut ${x.num_rebut} de ${eur.format(x.prima_total)} amb data ${dataCurta(x.inici)}: la matrícula no és a cap vehicle de l'eina.`,
+        enllac: "/admin/rebuts",
+      });
+    }
+  }
+
   return r.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
 }
 
 /** Llegeix les fonts amb el client donat (Administració amb sessió, o la clau de servei). */
 export async function llegeixFonts(client: SupabaseClient): Promise<Fonts> {
-  const [avisos, baixes, altes, flota, senseMotiu] = await Promise.all([
+  const [avisos, baixes, altes, flota, senseMotiu, rebuts] = await Promise.all([
     client
       .from("avisos")
       .select("id, tipus, enviat_at, escalat_at, vehicle_id, vehicles_assegurats!inner(matricula, estat)")
@@ -165,8 +284,19 @@ export async function llegeixFonts(client: SupabaseClient): Promise<Fonts> {
       .returns<{ id: string; tipus: string; enviat_at: string; escalat_at: string | null; vehicle_id: string; vehicles_assegurats: { matricula: string; estat: string } }[]>(),
     client
       .from("baixes")
-      .select("vehicle_id, estat, created_at, updated_at, vehicles_assegurats!inner(matricula, estat)")
-      .returns<{ vehicle_id: string; estat: string; created_at: string; updated_at: string; vehicles_assegurats: { matricula: string; estat: string } }[]>(),
+      .select(
+        "id, vehicle_id, estat, data_baixa, extorn_esperat, extorn_liquidat, liquidada_at, reclamada_at, created_at, updated_at, vehicles_assegurats!inner(matricula, estat)",
+      )
+      // No cal tot l'historial: les liquidades ja estan tancades. Les fallides i anul·lades sí que hi són
+      // (per saber quina és la darrera baixa de cada vehicle).
+      .is("liquidada_at", null)
+      .returns<
+        (Omit<Fonts["baixes"][number], "matricula" | "estat_vehicle" | "extorn_esperat" | "extorn_liquidat"> & {
+          extorn_esperat: number | string | null;
+          extorn_liquidat: number | string | null;
+          vehicles_assegurats: { matricula: string; estat: string };
+        })[]
+      >(),
     client
       .from("vehicles_assegurats")
       .select("id, matricula, updated_at")
@@ -184,18 +314,26 @@ export async function llegeixFonts(client: SupabaseClient): Promise<Fonts> {
       .eq("estat", "assegurat")
       .is("motiu", null)
       .returns<Fonts["senseMotiu"]>(),
+    client
+      .from("rebuts")
+      .select("id, num_rebut, tipus, matricula, prima_total, inici, created_at, vehicle_id, baixa_id")
+      .is("baixa_id", null)
+      .is("descartat_at", null)
+      .or("vehicle_id.is.null,tipus.eq.extorn")
+      .returns<(Omit<Fonts["rebuts"][number], "prima_total"> & { prima_total: number | string })[]>(),
   ]);
-  for (const q of [avisos, baixes, altes, flota, senseMotiu]) if (q.error) throw q.error;
+  for (const q of [avisos, baixes, altes, flota, senseMotiu, rebuts]) if (q.error) throw q.error;
+  const num = (v: number | string | null) => (v === null ? null : Number(v));
   return {
     avisos: avisos.data!.map(({ vehicles_assegurats: v, ...a }) => ({ ...a, matricula: v.matricula, estat_vehicle: v.estat })),
-    baixes: baixes.data!.map((b) => ({
-      vehicle_id: b.vehicle_id,
-      estat: b.estat,
-      created_at: b.created_at,
-      updated_at: b.updated_at,
-      matricula: b.vehicles_assegurats.matricula,
-      estat_vehicle: b.vehicles_assegurats.estat,
+    baixes: baixes.data!.map(({ vehicles_assegurats: v, ...b }) => ({
+      ...b,
+      extorn_esperat: num(b.extorn_esperat),
+      extorn_liquidat: num(b.extorn_liquidat),
+      matricula: v.matricula,
+      estat_vehicle: v.estat,
     })),
+    rebuts: rebuts.data!.map((x) => ({ ...x, prima_total: Number(x.prima_total) })),
     altesEnviant: altes.data!,
     darrerFlota: flota.data![0] ?? null,
     senseMotiu: senseMotiu.data!,

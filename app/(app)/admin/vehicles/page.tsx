@@ -23,12 +23,17 @@ const dataHora = new Intl.DateTimeFormat("ca-ES", { dateStyle: "short", timeStyl
 // L'enviament del correu (Graph) pot trigar: les Server Actions d'aquesta pàgina tenen fins a 60 s.
 export const maxDuration = 60;
 
+const eurTancat = new Intl.NumberFormat("ca-ES", { style: "currency", currency: "EUR" });
+const dataCurtaMadrid = new Intl.DateTimeFormat("ca-ES", { dateStyle: "short", timeZone: "Europe/Madrid" });
+
 type BaixaEnCurs = {
   id: string;
   vehicle_id: string;
   estat: "pendent_polissa" | "enviant" | "enviada" | "anullant";
   data_baixa: string;
   extorn_esperat: number | null;
+  extorn_liquidat: number | null;
+  liquidada_at: string | null;
   updated_at: string;
 };
 
@@ -74,6 +79,7 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
     { data: cap, error: errCap },
     { data: ambPolissa, error: errPol },
     { data: baixes, error: errB },
+    { data: tancats, error: errT },
   ] = await Promise.all([
       supabase.from("usuaris").select("id, nom").eq("actiu", true).order("nom").returns<{ id: string; nom: string }[]>(),
       supabase.from("centres").select("id, nom").order("id").returns<{ id: number; nom: string }[]>(),
@@ -92,15 +98,32 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
         .returns<{ id: string }[]>(),
       supabase
         .from("baixes")
-        .select("id, vehicle_id, estat, data_baixa, extorn_esperat, updated_at")
+        .select("id, vehicle_id, estat, data_baixa, extorn_esperat, extorn_liquidat, liquidada_at, updated_at")
         .in("estat", ["pendent_polissa", "enviant", "enviada", "anullant"])
         .returns<BaixaEnCurs[]>(),
+      // Vehicles Tancats amb l'extorn liquidat els últims 30 dies (per veure "Extorn liquidat X €").
+      supabase
+        .from("baixes")
+        .select("id, data_baixa, extorn_liquidat, liquidada_at, vehicles_assegurats!inner(matricula, estat)")
+        .eq("vehicles_assegurats.estat", "tancat")
+        .gte("liquidada_at", new Date(Date.now() - 30 * 86_400_000).toISOString())
+        .order("liquidada_at", { ascending: false })
+        .returns<
+          {
+            id: string;
+            data_baixa: string;
+            extorn_liquidat: number | string;
+            liquidada_at: string;
+            vehicles_assegurats: { matricula: string; estat: string };
+          }[]
+        >(),
     ]);
   if (errU) throw errU;
   if (errC) throw errC;
   if (errCap) throw errCap;
   if (errPol) throw errPol;
   if (errB) throw errB;
+  if (errT) throw errT;
 
   const avui = avuiMadrid();
   const tePolissa = new Set(ambPolissa.map((p) => p.id));
@@ -113,6 +136,8 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
         estat: b.estat,
         data_baixa: b.data_baixa,
         extorn_esperat: b.extorn_esperat === null ? null : Number(b.extorn_esperat),
+        extorn_liquidat: b.extorn_liquidat === null ? null : Number(b.extorn_liquidat),
+        liquidada_at: b.liquidada_at,
         recent: new Date(b.updated_at).getTime() > fa2min,
       },
     ]),
@@ -172,6 +197,24 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
             />
           ))}
         </ul>
+      )}
+
+      {tancats.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold">{tv.baixa.tancatsRecents}</h2>
+          <ul className="divide-y rounded-md border bg-white">
+            {tancats.map((b) => (
+              <li key={b.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 p-4 text-sm">
+                <span className="font-semibold">{b.vehicles_assegurats.matricula}</span>
+                <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{tv.estats.tancat}</span>
+                <span className="text-gray-700">
+                  {tv.baixa.donat(b.data_baixa.split("-").reverse().join("/"))} ·{" "}
+                  {tv.baixa.liquidat(eurTancat.format(Number(b.extorn_liquidat)), dataCurtaMadrid.format(new Date(b.liquidada_at)))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );
