@@ -6,7 +6,8 @@ import { correuAnullacio, correuBaixa, dataCurta } from "@/lib/correu/plantilles
 import { avuiMadrid } from "@/lib/dies-laborables";
 import { descarregaPdf, esborraPdf, pujaPdf } from "@/lib/documents";
 import { extornEsperat } from "@/lib/extorns/calcula";
-import { llegeixRelacioExcel, llegeixRelacioPdf } from "@/lib/flota/llegeix-relacio";
+import { extreuTextPdf, llegeixRelacioExcel, llegeixRelacioPdf } from "@/lib/flota/llegeix-relacio";
+import { matriculesDelText } from "@/lib/polisses/matricula";
 import { esPdf, MIME, tipusDocument } from "@/lib/pdf";
 import { createClient } from "@/lib/supabase/server";
 import { t } from "@/lib/textos";
@@ -318,6 +319,47 @@ export async function marcaAssegurat(_prev: EstatAccio, formData: FormData): Pro
   return { ok: t.vehicles.assegurat.ok };
 }
 
+/**
+ * Envia una baixa `pendent_polissa` amb la pòlissa ja desada al vehicle (dues fases):
+ * activa → correu → confirma. Retorna {} si s'ha enviat i confirmat.
+ */
+async function enviaBaixaAmbPolissa(
+  supabase: Supabase,
+  b: { baixaId: string; matricula: string; dataBaixa: string; path: string; pdf: Uint8Array; signatura: string },
+): Promise<EstatAccio> {
+  // Si la data demanada ja ha passat, la BD la porta a avui.
+  const { data: dataFinal, error: errA } = await supabase.rpc("activa_baixa_pendent", { p_baixa: b.baixaId, p_polissa: b.path });
+  if (errA) {
+    console.error("Error activant la baixa pendent", errA);
+    return { error: missatgeErrorVehicles(errA) };
+  }
+  const dataBaixa = String(dataFinal ?? b.dataBaixa);
+
+  try {
+    await enviaCorreu(correuBaixa({ matricula: b.matricula, dataBaixa, signatura: b.signatura }), [
+      { nom: `POL. ${b.matricula}.pdf`, contingut: b.pdf, tipus: "application/pdf" },
+    ]);
+  } catch (err) {
+    console.error("Error enviant la baixa pendent", b.baixaId, err);
+    if (err instanceof ErrorCorreu && err.incert) {
+      revalidatePath("/admin/vehicles");
+      return { error: e.correuIncert };
+    }
+    await revertir(supabase, "descarta_baixa", { p_baixa: b.baixaId });
+    revalidatePath("/admin/vehicles");
+    return { error: e.correu };
+  }
+  try {
+    const { error: errC } = await supabase.rpc("confirma_baixa", { p_baixa: b.baixaId, p_justificant: b.path });
+    if (errC) throw errC;
+  } catch (err) {
+    console.error("Baixa pendent enviada però no confirmada", b.baixaId, err);
+    revalidatePath("/admin/vehicles");
+    return { error: e.correuEnviatSenseDesar };
+  }
+  return {};
+}
+
 /** Baixa demanada des d'un Avís sense pòlissa: Administració la puja i la baixa s'envia (dues fases). */
 export async function enviaBaixaPendent(_prev: EstatAccio, formData: FormData): Promise<EstatAccio> {
   if (!esAdmin(await obtenirUsuariActual())) return { error: e.permis };
@@ -345,36 +387,15 @@ export async function enviaBaixaPendent(_prev: EstatAccio, formData: FormData): 
     await pujaPdf(path, pdf);
     const { error: errP } = await supabase.rpc("desa_polissa", { p_vehicle: vehicleId, p_path: path });
     if (errP) throw errP;
-    // Si la data demanada ja ha passat, la BD la porta a avui.
-    const { data: dataFinal, error: errA } = await supabase.rpc("activa_baixa_pendent", { p_baixa: baixaId, p_polissa: path });
-    if (errA) {
-      console.error("Error activant la baixa pendent", errA);
-      return { error: missatgeErrorVehicles(errA) };
-    }
-    baixa.data_baixa = String(dataFinal ?? baixa.data_baixa);
-
-    try {
-      await enviaCorreu(correuBaixa({ matricula: baixa.matricula, dataBaixa: baixa.data_baixa, signatura: config.signatura }), [
-        { nom: `POL. ${baixa.matricula}.pdf`, contingut: pdf, tipus: "application/pdf" },
-      ]);
-    } catch (err) {
-      console.error("Error enviant la baixa pendent", baixaId, err);
-      if (err instanceof ErrorCorreu && err.incert) {
-        revalidatePath("/admin/vehicles");
-        return { error: e.correuIncert };
-      }
-      await revertir(supabase, "descarta_baixa", { p_baixa: baixaId });
-      revalidatePath("/admin/vehicles");
-      return { error: e.correu };
-    }
-    try {
-      const { error: errC } = await supabase.rpc("confirma_baixa", { p_baixa: baixaId, p_justificant: path });
-      if (errC) throw errC;
-    } catch (err) {
-      console.error("Baixa pendent enviada però no confirmada", baixaId, err);
-      revalidatePath("/admin/vehicles");
-      return { error: e.correuEnviatSenseDesar };
-    }
+    const r = await enviaBaixaAmbPolissa(supabase, {
+      baixaId,
+      matricula: baixa.matricula,
+      dataBaixa: baixa.data_baixa,
+      path,
+      pdf,
+      signatura: config.signatura,
+    });
+    if (r.error) return r;
   } catch (err) {
     console.error("Error a la baixa pendent", err);
     return { error: err instanceof ErrorCorreu ? e.correu : e.generic };
@@ -401,4 +422,87 @@ export async function cancelaBaixaPendent(_prev: EstatAccio, formData: FormData)
   }
   revalidatePath("/admin/vehicles");
   return { ok: t.vehicles.baixa.okCancelaPendent };
+}
+
+export type ResultatPolissaLot = { error: string } | { ok: true; matricula: string; baixaEnviada: boolean };
+
+/**
+ * Pujada massiva de pòlisses: un fitxer per crida (límit de mida de les Server Actions).
+ * El vehicle arriba triat per la vista prèvia (matrícula del nom); si no, es busca al text del PDF.
+ * Si el vehicle té una baixa pendent de pòlissa, s'envia a la corredoria.
+ */
+export async function desaPolissaLot(formData: FormData): Promise<ResultatPolissaLot> {
+  if (!esAdmin(await obtenirUsuariActual())) return { error: e.permis };
+  const pdf = await pdfDelFormulari(formData.get("fitxer"));
+  if (pdf === null) return { error: e.senseFitxer };
+  if (typeof pdf === "string") return { error: pdf };
+  const triat = String(formData.get("vehicle") ?? "");
+  if (triat && !/^[0-9a-f-]{36}$/i.test(triat)) return { error: e.noTrobat };
+
+  const supabase = await createClient();
+  try {
+    const { data: vehicles, error: errV } = await supabase
+      .from("vehicles_assegurats")
+      .select("id, matricula")
+      .not("estat", "in", "(rebutjat,tancat)")
+      .returns<{ id: string; matricula: string }[]>();
+    if (errV) throw errV;
+
+    let vehicle = triat ? vehicles.find((v) => v.id === triat) : undefined;
+    if (triat && !vehicle) return { error: e.noTrobat };
+    if (!vehicle) {
+      let text: string;
+      try {
+        text = await extreuTextPdf(pdf);
+      } catch {
+        return { error: t.vehicles.polisses.noIdentificat };
+      }
+      const trobades = matriculesDelText(text, vehicles.map((v) => v.matricula));
+      if (trobades.length !== 1) return { error: t.vehicles.polisses.noIdentificat };
+      vehicle = vehicles.find((v) => v.matricula === trobades[0])!;
+      // Un altre fitxer del mateix lot ja és per a aquest vehicle: no se substitueix en silenci.
+      const exclosos = String(formData.get("exclou") ?? "").split(",");
+      if (exclosos.includes(vehicle.id)) return { error: t.vehicles.polisses.duplicat(vehicle.matricula) };
+    }
+
+    const { data: pendent, error: errB } = await supabase
+      .from("baixes")
+      .select("id, data_baixa")
+      .eq("vehicle_id", vehicle.id)
+      .eq("estat", "pendent_polissa")
+      .maybeSingle<{ id: string; data_baixa: string }>();
+    if (errB) throw errB;
+    // Si cal enviar la baixa, que falli abans de pujar res si el correu no està configurat.
+    const config = pendent ? configCorreu() : null;
+
+    const path = `polisses/${vehicle.id}-${crypto.randomUUID()}.pdf`;
+    await pujaPdf(path, pdf);
+    const { error: errP } = await supabase.rpc("desa_polissa", { p_vehicle: vehicle.id, p_path: path });
+    if (errP) {
+      await esborraPdf(path);
+      throw errP;
+    }
+
+    if (pendent && config) {
+      const r = await enviaBaixaAmbPolissa(supabase, {
+        baixaId: pendent.id,
+        matricula: vehicle.matricula,
+        dataBaixa: pendent.data_baixa,
+        path,
+        pdf,
+        signatura: config.signatura,
+      });
+      if (r.error) return { error: `${vehicle.matricula}: ${r.error}` };
+    }
+    return { ok: true, matricula: vehicle.matricula, baixaEnviada: !!pendent };
+  } catch (err) {
+    console.error("Error desant la pòlissa", err);
+    return { error: err instanceof ErrorCorreu ? e.correu : e.generic };
+  }
+}
+
+/** Refresca la pantalla un cop acabada la pujada massiva. */
+export async function acabaPujadaPolisses(): Promise<void> {
+  if (!esAdmin(await obtenirUsuariActual())) return;
+  revalidatePath("/admin/vehicles");
 }

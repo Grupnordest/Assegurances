@@ -5,6 +5,7 @@ import { t } from "@/lib/textos";
 import { esAdmin, exigeixUsuariActiu } from "@/lib/usuari-actual";
 import FilaVehicle, { type VehicleFila } from "./fila-vehicle";
 import FormulariLlistat from "./formulari-llistat";
+import PujadaPolisses from "./pujada-polisses";
 import type { FilaDescartada } from "@/lib/flota/llegeix-llistat";
 import { textDescartades } from "./regles";
 import { avuiMadrid } from "@/lib/dies-laborables";
@@ -135,6 +136,15 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
         </p>
         {carrega.descartades.length > 0 && <p className="text-amber-900">{textDescartades(carrega.descartades)}</p>}
       </div>
+
+      <PujadaPolisses
+        vehicles={vehicles.map((v) => ({
+          id: v.id,
+          matricula: v.matricula,
+          tePolissa: tePolissa.has(v.id),
+          baixaPendent: baixaDe.get(v.id)?.estat === "pendent_polissa",
+        }))}
+      />
 
       <nav className="flex flex-wrap gap-2">
         <Link href="/admin/vehicles" className={pestanya(!tots)}>
