@@ -1,11 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { llegeixRebuts } from "@/lib/rebuts/llegeix-rebuts";
+import { llegeixRebuts, separaCartera } from "@/lib/rebuts/llegeix-rebuts";
 import { createClient } from "@/lib/supabase/server";
 import { t } from "@/lib/textos";
 import { esAdmin, obtenirUsuariActual } from "@/lib/usuari-actual";
-import { MAX_FITXERS, MIDA_MAXIMA, missatgeErrorRebuts } from "./regles";
+import { MAX_FITXERS, MIDA_MAXIMA, missatgeErrorCartera, missatgeErrorRebuts } from "./regles";
 
 export type ResumImportacio = {
   importades: number;
@@ -19,10 +19,20 @@ export type ResumImportacio = {
   no_identificats: number;
 };
 
+/** Resum de la conciliació del Rebut de cartera (FR-22). */
+export type ResumCartera = {
+  ok: number;
+  sense_control: number;
+  cobrat_despres_baixa: number;
+  absent: number;
+  quadra: boolean;
+};
+
 export type ResultatFitxer = {
   nom: string;
   error?: string;
   resum?: ResumImportacio & { ignorades: number };
+  cartera?: ResumCartera;
   /** Números de rebut amb una Clase desconeguda (no importats). */
   desconegudes?: string[];
 };
@@ -57,16 +67,51 @@ export async function importaRebuts(_prev: EstatImportacio, formData: FormData):
     }
     const desconegudes = lectura.desconegudes.map((d) => d.num_rebut);
     const buit = { importades: 0, repetides: 0, recasades: 0, emissions: 0, primes: 0, sense_vehicle: 0, liquidats: 0, incorrectes: 0, no_identificats: 0 };
-    if (lectura.linies.length === 0) {
+
+    // Rebut de cartera (Clase 30): va a la seva taula de conciliació, mai a `rebuts`.
+    const cartera = separaCartera(lectura.linies, lectura.mares);
+    if (cartera && !cartera.ok) {
+      resultats.push({ nom, error: e.dosPeriodes });
+      continue;
+    }
+    // La prima anual dels rebuts la torna a calcular la base de dades (mateixa fórmula).
+    const rebuts = lectura.linies.filter((l) => l.tipus !== "cartera").map((l) => ({ ...l, prima_anual: undefined }));
+
+    if (cartera) {
+      // Cartera i resta de rebuts en una sola transacció: si falla, no s'importa res del fitxer.
+      try {
+        const { data, error } = await supabase.rpc("importa_cartera", {
+          p_linies: cartera.linies,
+          p_mare: cartera.mare,
+          p_fitxer: nom,
+          p_rebuts: rebuts.length ? rebuts : null,
+        });
+        if (error) {
+          console.error("Error important el Rebut de cartera", nom, error);
+          resultats.push({ nom, error: missatgeErrorCartera(error) });
+          continue;
+        }
+        const { rebuts: resumRebuts, ...resumCartera } = data as ResumCartera & { rebuts: Partial<ResumImportacio> | null };
+        resultats.push({
+          nom,
+          // Un fitxer només de cartera no mostra el resum de rebuts (tot serien zeros).
+          resum: resumRebuts ? { ...buit, ...resumRebuts, ignorades: lectura.ignorades } : undefined,
+          cartera: resumCartera,
+          desconegudes,
+        });
+      } catch (err) {
+        console.error("Error important el Rebut de cartera", nom, err);
+        resultats.push({ nom, error: e.carteraGeneric });
+      }
+      continue;
+    }
+
+    if (rebuts.length === 0) {
       resultats.push({ nom, resum: { ...buit, ignorades: lectura.ignorades }, desconegudes });
       continue;
     }
     try {
-      const { data, error } = await supabase.rpc("importa_rebuts", {
-        // La prima anual la torna a calcular la base de dades (mateixa fórmula).
-        p_rebuts: lectura.linies.map((l) => ({ ...l, prima_anual: undefined })),
-        p_fitxer: nom,
-      });
+      const { data, error } = await supabase.rpc("importa_rebuts", { p_rebuts: rebuts, p_fitxer: nom });
       if (error) {
         console.error("Error important rebuts", nom, error);
         resultats.push({ nom, error: error.code === "42501" ? e.permis : e.generic });

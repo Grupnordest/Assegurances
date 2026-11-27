@@ -459,6 +459,10 @@ export const t = {
         .join(" · "),
     desconegudes: (n: string[]) =>
       `No s'han importat ${n.length} línies amb una Clase que l'eina no coneix (${n.join(", ")}). Parla-ho abans amb qui manté l'eina.`,
+    cartera: (r: { ok: number; sense_control: number; cobrat_despres_baixa: number; absent: number; quadra: boolean }) =>
+      `Rebut de cartera: ${r.ok} vehicles casats, ${r.sense_control} assegurats sense control, ${r.cobrat_despres_baixa} cobrats després de la baixa, ${r.absent} vehicles que no hi són. ${
+        r.quadra ? "La suma quadra amb la pòlissa mare." : "La suma NO quadra amb la pòlissa mare."
+      }`,
     ultimes: "Últimes línies importades",
     capLinia: "Encara no s'ha importat cap rebut.",
     columnes: {
@@ -490,6 +494,9 @@ export const t = {
       format: (falten: string[]) => `Al fitxer li falten aquestes columnes: ${falten.join(", ")}.`,
       dades: (fila: number, camp: string) => `Fila ${fila}: el camp «${camp}» no és vàlid. No s'ha importat res d'aquest fitxer.`,
       buit: "El fitxer no té cap línia de vehicle.",
+      dosPeriodes: "El fitxer porta línies de Rebut de cartera de dos períodes diferents. No s'ha importat res d'aquest fitxer.",
+      carteraGeneric: "No s'ha pogut importar el Rebut de cartera. No s'ha importat res d'aquest fitxer. Torna-ho a provar.",
+      carteraRepetida: "El Rebut de cartera repeteix una matrícula. No s'ha importat res d'aquest fitxer.",
       generic: "No s'ha pogut importar el fitxer. Torna-ho a provar.",
     },
   },
@@ -507,6 +514,10 @@ export const t = {
     descartaTitol: "Descartar la línia amb un comentari (no s'esborra)",
     descarta: "Descartar",
     descartat: "Línia descartada.",
+    creaAssegurat: "Crear com a Assegurat",
+    creaAssegurant: "Creant…",
+    vehicleCreat: "Vehicle creat com a Assegurat, sense Motiu.",
+    confirmaCrea: (matricula: string) => `Es crearà el vehicle ${matricula} com a Assegurat, amb la prima i la pòlissa del rebut. Continuar?`,
     errors: {
       permis: "No tens permís per fer aquesta acció.",
       dades: "Incidència no vàlida.",
@@ -516,6 +527,8 @@ export const t = {
       correuIncert:
         "No se sap si el correu de reclamació ha sortit. Mira a Elements enviats d'assegurances@: les baixes queden marcades com a reclamades.",
       estatRebut: "Aquesta línia de rebut ja està casada o descartada.",
+      estatCartera: "Aquesta línia del Rebut de cartera ja està resolta o descartada.",
+      matriculaOberta: "Aquesta matrícula ja té un vehicle a l'eina.",
       generic: "No s'ha pogut fer l'acció. Torna-ho a provar.",
     },
   },

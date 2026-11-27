@@ -23,3 +23,11 @@ export function missatgeErrorRebuts(r: Extract<ResultatRebuts, { ok: false }>): 
       return e.buit;
   }
 }
+
+/** Error de l'RPC importa_cartera → missatge per a Administració. */
+export function missatgeErrorCartera(error: { code?: string; message?: string }): string {
+  if (error.code === "42501") return e.permis;
+  const m = error.message ?? "";
+  if (m.includes("matricula_repetida")) return e.carteraRepetida;
+  return e.carteraGeneric;
+}

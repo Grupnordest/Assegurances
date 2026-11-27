@@ -57,6 +57,7 @@ export default function FormulariRebuts() {
               {f.resum && <p>{tr.resumFitxer(f.resum)}</p>}
               {f.resum && tr.detallFitxer(f.resum) && <p>{tr.detallFitxer(f.resum)}</p>}
               {f.resum && f.resum.recasades > 0 && <p>{tr.recasades(f.resum.recasades)}</p>}
+              {f.cartera && <p className={f.cartera.quadra ? undefined : "text-amber-900"}>{tr.cartera(f.cartera)}</p>}
               {f.desconegudes && f.desconegudes.length > 0 && <p className="text-amber-900">{tr.desconegudes(f.desconegudes)}</p>}
             </li>
           ))}

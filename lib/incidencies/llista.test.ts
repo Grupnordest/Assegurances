@@ -156,3 +156,61 @@ describe("extorns i rebuts", () => {
     expect(esPerReclamar(baixa({ data_baixa: "2026-11-01" }), ARA)).toBe(false);
   });
 });
+
+describe("Rebut de cartera (FR-22)", () => {
+  const linia = (p: Partial<NonNullable<Fonts["cartera"]>["linies"][number]>): NonNullable<Fonts["cartera"]>["linies"][number] => ({
+    id: "c1",
+    tipus: "sense_control",
+    num_rebut: "200000001-A",
+    matricula: "9999ZZZ",
+    prima_total: 120,
+    extorn_esperat: null,
+    extorn_rebut_id: null,
+    liquidat_at: null,
+    descartat_at: null,
+    vehicle_id: null,
+    inici: "2026-06-04",
+    created_at: fa(100),
+    ...p,
+  });
+  const ambCartera = (linies: NonNullable<Fonts["cartera"]>["linies"], darrera: NonNullable<Fonts["cartera"]>["darrera"] = null) =>
+    construeixIncidencies({ ...buit, cartera: { linies, darrera } }, ARA);
+
+  it("sense control i absent, amb la línia per actuar des de la safata", () => {
+    expect(ambCartera([linia({}), linia({ id: "c2", tipus: "absent", vehicle_id: "v1", num_rebut: null, prima_total: null })])).toMatchObject([
+      { tipus: "cartera_sense_control", carteraLiniaId: "c1", matricula: "9999ZZZ" },
+      { tipus: "cartera_absent", carteraLiniaId: "c2", vehicle: "v1" },
+    ]);
+  });
+
+  it("no quadra: només si la darrera conciliació no quadra", () => {
+    const d = { inici: "2026-12-04", prima_mare: 100, suma_linies: 99, quadra: false, created_at: fa(10) };
+    expect(ambCartera([], d)).toMatchObject([{ tipus: "cartera_no_quadra", enllac: "/admin/rebuts" }]);
+    expect(ambCartera([], { ...d, quadra: true })).toEqual([]);
+  });
+
+  it("extorn de cartera pendent: passats 60 dies de l'inici, o de seguida si l'extorn rebut no quadra", () => {
+    const cobrada = (p: Partial<NonNullable<Fonts["cartera"]>["linies"][number]>) =>
+      linia({ tipus: "cobrat_despres_baixa", extorn_esperat: 120, vehicle_id: "v1", ...p });
+    expect(ambCartera([cobrada({ inici: "2026-06-04" })])).toMatchObject([{ tipus: "cartera_extorn_pendent", data: "2026-08-03T00:00:00Z" }]);
+    expect(ambCartera([cobrada({ inici: "2026-10-01" })])).toEqual([]);
+    expect(ambCartera([cobrada({ inici: "2026-10-01", extorn_rebut_id: "r1" })])).toMatchObject([{ tipus: "cartera_extorn_pendent" }]);
+  });
+
+  it("cobrat el mateix dia de la baixa (sense extorn esperat): excepció visible de seguida i descartable", () => {
+    const r = ambCartera([linia({ tipus: "cobrat_despres_baixa", extorn_esperat: null, vehicle_id: "v1", inici: "2026-12-04" })]);
+    expect(r).toMatchObject([{ tipus: "cartera_extorn_pendent", carteraLiniaId: "c1" }]);
+    expect(r[0].descripcio).toContain("l'extorn es controla a la baixa");
+    expect(ambCartera([linia({ tipus: "cobrat_despres_baixa", extorn_esperat: null, descartat_at: fa(1) })])).toEqual([]);
+  });
+
+  it("exclou les línies descartades, liquidades i 'ok'", () => {
+    expect(
+      ambCartera([
+        linia({ descartat_at: fa(5) }),
+        linia({ tipus: "cobrat_despres_baixa", extorn_rebut_id: "r1", liquidat_at: fa(5) }),
+        linia({ tipus: "ok" }),
+      ]),
+    ).toEqual([]);
+  });
+});

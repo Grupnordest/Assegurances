@@ -141,6 +141,64 @@ export async function descartaRebut(_prev: EstatExtorn, formData: FormData): Pro
   return { ok: te.descartat };
 }
 
+const liniaCarteraSchema = z.object({ linia: z.string().uuid(t.extorns.errors.dades) });
+const descartaCarteraSchema = liniaCarteraSchema.extend({ comentari: descartaSchema.shape.comentari });
+
+/** Error d'una RPC de cartera → missatge per a Administració. */
+function errorCartera(error: { code?: string; message?: string }): EstatExtorn {
+  const te = t.extorns;
+  if (error.code === "42501") return { error: te.errors.permis };
+  const m = error.message ?? "";
+  if (m.includes("comentari")) return { error: te.errors.comentari };
+  if (m.includes("estat_linia")) return { error: te.errors.estatCartera };
+  // 23505: l'índex únic de matrícula oberta (un altre cicle creat alhora).
+  if (m.includes("matricula_oberta") || error.code === "23505") return { error: te.errors.matriculaOberta };
+  return { error: te.errors.generic };
+}
+
+/** Administració descarta una línia del Rebut de cartera amb un comentari (no s'esborra). */
+export async function descartaLiniaCartera(_prev: EstatExtorn, formData: FormData): Promise<EstatExtorn> {
+  const te = t.extorns;
+  if (!esAdmin(await obtenirUsuariActual())) return { error: te.errors.permis };
+  const parsed = descartaCarteraSchema.safeParse({ linia: formData.get("linia"), comentari: formData.get("comentari") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? te.errors.dades };
+  try {
+    const { error } = await (await createClient()).rpc("descarta_linia_cartera", {
+      p_linia: parsed.data.linia,
+      p_comentari: parsed.data.comentari,
+    });
+    if (error) {
+      console.error("Error descartant la línia de cartera", error);
+      return errorCartera(error);
+    }
+  } catch (err) {
+    console.error("Error descartant la línia de cartera", err);
+    return { error: te.errors.generic };
+  }
+  revalidatePath("/", "layout");
+  return { ok: te.descartat };
+}
+
+/** "Crear com a Assegurat": crea el vehicle d'una línia sense control amb la prima i la pòlissa del rebut. */
+export async function creaVehicleDeCartera(_prev: EstatExtorn, formData: FormData): Promise<EstatExtorn> {
+  const te = t.extorns;
+  if (!esAdmin(await obtenirUsuariActual())) return { error: te.errors.permis };
+  const parsed = liniaCarteraSchema.safeParse({ linia: formData.get("linia") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? te.errors.dades };
+  try {
+    const { error } = await (await createClient()).rpc("crea_vehicle_de_cartera", { p_linia: parsed.data.linia });
+    if (error) {
+      console.error("Error creant el vehicle des de la cartera", error);
+      return errorCartera(error);
+    }
+  } catch (err) {
+    console.error("Error creant el vehicle des de la cartera", err);
+    return { error: te.errors.generic };
+  }
+  revalidatePath("/", "layout");
+  return { ok: te.vehicleCreat };
+}
+
 /** Administració accepta un extorn que no quadra, amb un comentari: tanca la baixa. */
 export async function acceptaExtorn(_prev: EstatExtorn, formData: FormData): Promise<EstatExtorn> {
   const te = t.extorns;

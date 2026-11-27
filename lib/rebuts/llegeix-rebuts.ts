@@ -2,8 +2,11 @@ import * as XLSX from "xlsx";
 import { esMatriculaValida, normalitzaMatricula } from "../estoc/matricula";
 import { primaAnualDeRebut } from "../extorns/calcula";
 
-/** Emissió (Clase 00/02), extorn (Clase 93) o qualsevol altra (no s'importa: cal decidir-ho abans). */
-export type TipusRebut = "emissio" | "extorn" | "desconeguda";
+/**
+ * Emissió (Clase 00/02), extorn (Clase 93), Rebut de cartera (Clase 30, FR-22) o qualsevol altra
+ * (no s'importa: cal decidir-ho abans).
+ */
+export type TipusRebut = "emissio" | "extorn" | "cartera" | "desconeguda";
 
 export type LiniaRebut = {
   num_rebut: string;
@@ -19,12 +22,23 @@ export type LiniaRebut = {
   situacio: string | null;
   data_situacio: string | null;
   matricula: string;
-  /** Prima anual equivalent (només emissions): prima × 365 ÷ dies del rebut. */
+  /** Prima anual equivalent (emissions i cartera): prima × 365 ÷ dies del rebut. */
   prima_anual: number | null;
 };
 
+/** Línia de la pòlissa mare (sense matrícula): al Rebut de cartera, la suma de les línies de vehicle. */
+export type LiniaMare = {
+  num_rebut: string;
+  clase: string;
+  tipus: TipusRebut;
+  /** "YYYY-MM-DD" */
+  inici: string;
+  fi: string;
+  prima_total: number;
+};
+
 export type ResultatRebuts =
-  | { ok: true; linies: LiniaRebut[]; ignorades: number; desconegudes: LiniaRebut[] }
+  | { ok: true; linies: LiniaRebut[]; ignorades: number; desconegudes: LiniaRebut[]; mares: LiniaMare[] }
   | { ok: false; error: "illegible" }
   | { ok: false; error: "sense-capcaleres" }
   | { ok: false; error: "massa-files"; maxim: number }
@@ -104,6 +118,7 @@ export function classificaClase(clase: string): TipusRebut {
   const n = Number(m[1]);
   if (n === 0 || n === 2) return "emissio";
   if (n === 93) return "extorn";
+  if (n === 30) return "cartera";
   return "desconeguda";
 }
 
@@ -141,6 +156,7 @@ export function llegeixRebuts(fitxer: ArrayBuffer | Uint8Array): ResultatRebuts 
 
   const linies: LiniaRebut[] = [];
   const desconegudes: LiniaRebut[] = [];
+  const mares: LiniaMare[] = [];
   let ignorades = 0;
 
   for (let i = filaCap + 1; i < files.length; i++) {
@@ -156,6 +172,21 @@ export function llegeixRebuts(fitxer: ArrayBuffer | Uint8Array): ResultatRebuts 
     const matricula = normalitzaMatricula(valor("Datos adicionales"));
     if (!matricula) {
       ignorades++;
+      // Al Rebut de cartera serveix per quadrar. Si les dades no es poden llegir, només es compta com a ignorada
+      // (els fitxers mensuals no en fan cap ús).
+      const [iniciMare, fiMare] = [llegeixDataRebut(valor("Inicio cobertura")), llegeixDataRebut(valor("Fin cobertura"))];
+      const primaMare = llegeixImportRebut(valor("Prima total"));
+      if (iniciMare && fiMare && primaMare !== null) {
+        const claseMare = (text(valor("Clase")) ?? "").slice(0, 100);
+        mares.push({
+          num_rebut: num.slice(0, 50),
+          clase: claseMare,
+          tipus: classificaClase(claseMare),
+          inici: iniciMare,
+          fi: fiMare,
+          prima_total: primaMare,
+        });
+      }
       continue;
     }
     if (!esMatriculaValida(matricula)) return { ok: false, error: "dades", fila: numFila, camp: "Datos adicionales" };
@@ -183,7 +214,7 @@ export function llegeixRebuts(fitxer: ArrayBuffer | Uint8Array): ResultatRebuts 
       situacio: text(valor("Situación"))?.slice(0, 100) ?? null,
       data_situacio: llegeixDataRebut(valor("Fecha situación")),
       matricula,
-      prima_anual: tipus === "emissio" ? primaAnualDeRebut(primaTotal, inici, fi) : null,
+      prima_anual: tipus === "emissio" || tipus === "cartera" ? primaAnualDeRebut(primaTotal, inici, fi) : null,
     };
     if (tipus === "desconeguda") desconegudes.push(linia);
     else linies.push(linia);
@@ -191,5 +222,56 @@ export function llegeixRebuts(fitxer: ArrayBuffer | Uint8Array): ResultatRebuts 
 
   // Un fitxer amb només la línia de la pòlissa mare és vàlid: 0 línies de vehicle.
   if (linies.length === 0 && desconegudes.length === 0 && ignorades === 0) return { ok: false, error: "buit" };
-  return { ok: true, linies, ignorades, desconegudes };
+  return { ok: true, linies, ignorades, desconegudes, mares };
+}
+
+/** Línia de cartera tal com la rep importa_cartera (amb la prima neta anual). */
+export type LiniaCartera = Omit<LiniaRebut, "tipus" | "clase" | "liquid" | "situacio" | "data_situacio"> & {
+  prima_neta_anual: number | null;
+};
+
+export type Cartera =
+  | { ok: true; linies: LiniaCartera[]; mare: { inici: string; prima_total: number } | null }
+  | { ok: false; error: "dos-periodes" };
+
+/**
+ * Separa les línies del Rebut de cartera (Clase 30) de la resta (FR-22). Totes han de ser del mateix període;
+ * la línia mare és la que no té matrícula, és de Clase 30 (o no en té) i té el mateix període (si n'hi ha més
+ * d'una, la de prima més alta).
+ * null si el fitxer no porta cap línia de cartera.
+ */
+export function separaCartera(linies: LiniaRebut[], mares: LiniaMare[]): Cartera | null {
+  const cartera = linies.filter((l) => l.tipus === "cartera");
+  if (cartera.length === 0) return null;
+  const { inici, fi } = cartera[0];
+  if (cartera.some((l) => l.inici !== inici || l.fi !== fi)) return { ok: false, error: "dos-periodes" };
+  const mare = mares
+    // Mare del Rebut de cartera: Clase 30 (o sense Clase) i el mateix període que les línies.
+    .filter((m) => (m.tipus === "cartera" || m.clase === "") && m.inici === inici && m.fi === fi)
+    .reduce<LiniaMare | null>((max, m) => (max === null || m.prima_total > max.prima_total ? m : max), null);
+  return {
+    ok: true,
+    linies: cartera.map((l) => ({
+      num_rebut: l.num_rebut,
+      polissa: l.polissa,
+      inici: l.inici,
+      fi: l.fi,
+      prima_total: l.prima_total,
+      prima_neta: l.prima_neta,
+      matricula: l.matricula,
+      prima_anual: l.prima_anual,
+      prima_neta_anual: l.prima_neta === null ? null : primaAnualDeRebut(l.prima_neta, l.inici, l.fi),
+    })),
+    mare: mare && { inici: mare.inici, prima_total: mare.prima_total },
+  };
+}
+
+/** Tolerància per quadrar la suma de les línies amb la pòlissa mare (en euros, inclosa). */
+export const TOLERANCIA_MARE = 0.01;
+
+/** La suma de les línies quadra amb la mare (±0,01 €). Treballa en cèntims. */
+export function quadraMare(linies: { prima_total: number }[], mare: { prima_total: number } | null): boolean {
+  if (mare === null) return false;
+  const suma = linies.reduce((s, l) => s + Math.round(l.prima_total * 100), 0);
+  return Math.abs(suma - Math.round(mare.prima_total * 100)) <= TOLERANCIA_MARE * 100;
 }

@@ -7,7 +7,13 @@ import { llistaIncidencies, NOM_TIPUS, type Incidencia } from "@/lib/incidencies
 import { createClient } from "@/lib/supabase/server";
 import { esAdmin, exigeixUsuariActiu } from "@/lib/usuari-actual";
 import FormulariTanca from "./formulari-tanca";
-import { BotoReclama, FormulariAcceptaExtorn, FormulariDescartaRebut } from "./formularis-extorns";
+import {
+  BotoCreaDeCartera,
+  BotoReclama,
+  FormulariAcceptaExtorn,
+  FormulariDescartaCartera,
+  FormulariDescartaRebut,
+} from "./formularis-extorns";
 
 // Respondre "baixa" envia el correu a la corredoria.
 export const maxDuration = 60;
@@ -25,7 +31,7 @@ export default async function IncidenciesPage() {
   const perReclamar = pendents.filter((i) => i.perReclamar).length;
 
   const fitxa = (i: Incidencia, n: number) => (
-    <li key={`${i.tipus}-${i.avisId ?? i.baixaId ?? i.vehicle ?? n}`} className="space-y-2 rounded-md border bg-white p-4">
+    <li key={`${i.tipus}-${i.avisId ?? i.baixaId ?? i.carteraLiniaId ?? i.rebutId ?? i.vehicle ?? n}`} className="space-y-2 rounded-md border bg-white p-4">
       <p className="text-sm text-gray-500">
         {NOM_TIPUS[i.tipus]} · {dataHora.format(new Date(i.data))}
       </p>
@@ -44,6 +50,18 @@ export default async function IncidenciesPage() {
         </div>
       ) : i.tipus === "extorn_incorrecte" && i.baixaId ? (
         <FormulariAcceptaExtorn baixaId={i.baixaId} />
+      ) : i.carteraLiniaId ? (
+        <div className="space-y-3">
+          {i.tipus === "cartera_sense_control" && i.matricula && (
+            <BotoCreaDeCartera liniaId={i.carteraLiniaId} matricula={i.matricula} />
+          )}
+          {i.enllac && (
+            <Link href={i.enllac} className="inline-flex min-h-11 items-center text-blue-700 hover:underline">
+              Resoldre →
+            </Link>
+          )}
+          <FormulariDescartaCartera liniaId={i.carteraLiniaId} />
+        </div>
       ) : i.rebutId ? (
         <div className="space-y-2">
           {i.enllac && (

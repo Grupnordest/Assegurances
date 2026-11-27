@@ -13,7 +13,11 @@ export type TipusIncidencia =
   | "extorn_pendent"
   | "extorn_incorrecte"
   | "extorn_no_identificat"
-  | "rebut_sense_vehicle";
+  | "rebut_sense_vehicle"
+  | "cartera_sense_control"
+  | "cartera_absent"
+  | "cartera_no_quadra"
+  | "cartera_extorn_pendent";
 
 export type Incidencia = {
   tipus: TipusIncidencia;
@@ -33,6 +37,8 @@ export type Incidencia = {
   perReclamar?: boolean;
   /** Línia de rebut sense casar (es pot descartar amb un comentari). */
   rebutId?: string;
+  /** Línia del Rebut de cartera (es pot descartar; si és sense control, també crear el vehicle). */
+  carteraLiniaId?: string;
 };
 
 export const NOM_TIPUS: Record<TipusIncidencia, string> = {
@@ -46,6 +52,10 @@ export const NOM_TIPUS: Record<TipusIncidencia, string> = {
   extorn_incorrecte: "Extorn incorrecte",
   extorn_no_identificat: "Extorn no identificat",
   rebut_sense_vehicle: "Rebut sense vehicle",
+  cartera_sense_control: "Assegurat sense control",
+  cartera_absent: "No és al rebut de cartera",
+  cartera_no_quadra: "Rebut de cartera no quadra",
+  cartera_extorn_pendent: "Extorn de cartera pendent",
 };
 
 /** Dies després de la data de baixa a partir dels quals un extorn no liquidat és pendent (FR-25). */
@@ -124,7 +134,30 @@ export type Fonts = {
   altesEnviant: { id: string; matricula: string; updated_at: string }[];
   darrerFlota: { estat: string; created_at: string } | null;
   senseMotiu: { id: string; matricula: string; data_alta: string | null; created_at: string }[];
+  /** Rebut de cartera (FR-22). Opcional: sense conciliacions no hi ha res a mostrar. */
+  cartera?: {
+    /** Línies que no són 'ok'. */
+    linies: {
+      id: string;
+      tipus: string;
+      num_rebut: string | null;
+      matricula: string;
+      prima_total: number | null;
+      extorn_esperat: number | null;
+      extorn_rebut_id: string | null;
+      liquidat_at: string | null;
+      descartat_at: string | null;
+      vehicle_id: string | null;
+      /** Inici del període ("YYYY-MM-DD"). */
+      inici: string;
+      created_at: string;
+    }[];
+    /** Conciliació més recent (la del darrer període). */
+    darrera: { inici: string; prima_mare: number | null; suma_linies: number; quadra: boolean; created_at: string } | null;
+  };
 };
+
+type LiniaCartera = NonNullable<Fonts["cartera"]>["linies"][number];
 
 /** Construeix la llista a partir de les fonts. Pura: es pot provar sense base de dades. */
 export function construeixIncidencies(f: Fonts, ara: Date = new Date()): Incidencia[] {
@@ -271,12 +304,103 @@ export function construeixIncidencies(f: Fonts, ara: Date = new Date()): Inciden
     }
   }
 
+  const c = f.cartera;
+  if (c?.darrera && !c.darrera.quadra) {
+    const d = c.darrera;
+    r.push({
+      tipus: "cartera_no_quadra",
+      data: d.created_at,
+      descripcio: `Rebut de cartera del ${dataCurta(d.inici)}: la suma de les línies (${eur.format(d.suma_linies)}) no quadra amb la pòlissa mare (${
+        d.prima_mare === null ? "no hi és" : eur.format(d.prima_mare)
+      }).`,
+      enllac: "/admin/rebuts",
+    });
+  }
+  for (const l of c?.linies ?? []) {
+    if (l.descartat_at !== null || l.liquidat_at !== null) continue;
+    const base = { vehicle: l.vehicle_id ?? undefined, matricula: l.matricula, carteraLiniaId: l.id };
+    if (l.tipus === "sense_control") {
+      r.push({
+        ...base,
+        tipus: "cartera_sense_control",
+        data: l.created_at,
+        descripcio: `Rebut de cartera del ${dataCurta(l.inici)} (rebut ${l.num_rebut ?? "—"}, ${
+          l.prima_total === null ? "sense prima" : eur.format(l.prima_total)
+        }): la matrícula no té cap vehicle obert a l'eina.`,
+      });
+    } else if (l.tipus === "absent") {
+      r.push({
+        ...base,
+        tipus: "cartera_absent",
+        data: l.created_at,
+        descripcio: `Vehicle assegurat que no surt al Rebut de cartera del ${dataCurta(l.inici)}.`,
+        enllac: VEHICLES,
+      });
+    } else if (l.tipus === "cobrat_despres_baixa") {
+      const esperat = l.extorn_esperat === null ? "pendent de prima" : eur.format(l.extorn_esperat);
+      // Cobrat el mateix dia de la baixa (sense extorn esperat propi): excepció visible de seguida, sense reclamar.
+      if (l.extorn_esperat === null && l.extorn_rebut_id === null) {
+        r.push({
+          ...base,
+          tipus: "cartera_extorn_pendent",
+          data: l.created_at,
+          descripcio: `Cobrat al Rebut de cartera del ${dataCurta(l.inici)} el mateix dia de la baixa; l'extorn es controla a la baixa.`,
+        });
+        continue;
+      }
+      // Extorn rebut que no quadra: es mostra de seguida. Si no n'ha arribat cap, passats 60 dies de l'inici del període (el cobrament).
+      if (l.extorn_rebut_id !== null) {
+        r.push({
+          ...base,
+          tipus: "cartera_extorn_pendent",
+          data: l.created_at,
+          descripcio: `Cobrat al Rebut de cartera del ${dataCurta(l.inici)} després de la baixa: l'extorn rebut no quadra amb l'esperat (${esperat}).`,
+        });
+      } else if (avuiMadrid(ara) >= sumaDies(l.inici, DIES_EXTORN_PENDENT)) {
+        r.push({
+          ...base,
+          tipus: "cartera_extorn_pendent",
+          data: `${sumaDies(l.inici, DIES_EXTORN_PENDENT)}T00:00:00Z`,
+          descripcio: `Cobrat al Rebut de cartera del ${dataCurta(l.inici)} després de la baixa i sense extorn després de ${DIES_EXTORN_PENDENT} dies (esperat: ${esperat}).`,
+        });
+      }
+    }
+  }
+
   return r.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+}
+
+type FilaLiniaCartera = Omit<LiniaCartera, "inici" | "prima_total" | "extorn_esperat"> & {
+  prima_total: number | string | null;
+  extorn_esperat: number | string | null;
+  cartera_conciliacions: { inici: string };
+};
+
+/** Línies de cartera obertes (no 'ok', ni descartades ni liquidades), per pàgines per no topar amb el límit de l'API. */
+async function liniesCarteraObertes(client: SupabaseClient): Promise<FilaLiniaCartera[]> {
+  const PAGINA = 1000;
+  const totes: FilaLiniaCartera[] = [];
+  for (let des = 0; ; des += PAGINA) {
+    const { data, error } = await client
+      .from("cartera_linies")
+      .select(
+        "id, tipus, num_rebut, matricula, prima_total, extorn_esperat, extorn_rebut_id, liquidat_at, descartat_at, vehicle_id, created_at, cartera_conciliacions!inner(inici)",
+      )
+      .neq("tipus", "ok")
+      .is("descartat_at", null)
+      .is("liquidat_at", null)
+      .order("id")
+      .range(des, des + PAGINA - 1)
+      .returns<FilaLiniaCartera[]>();
+    if (error) throw error;
+    totes.push(...data);
+    if (data.length < PAGINA) return totes;
+  }
 }
 
 /** Llegeix les fonts amb el client donat (Administració amb sessió, o la clau de servei). */
 export async function llegeixFonts(client: SupabaseClient): Promise<Fonts> {
-  const [avisos, baixes, altes, flota, senseMotiu, rebuts] = await Promise.all([
+  const [avisos, baixes, altes, flota, senseMotiu, rebuts, carteraLinies, carteraDarrera] = await Promise.all([
     client
       .from("avisos")
       .select("id, tipus, enviat_at, escalat_at, vehicle_id, vehicles_assegurats!inner(matricula, estat)")
@@ -319,11 +443,21 @@ export async function llegeixFonts(client: SupabaseClient): Promise<Fonts> {
       .select("id, num_rebut, tipus, matricula, prima_total, inici, created_at, vehicle_id, baixa_id")
       .is("baixa_id", null)
       .is("descartat_at", null)
+      // Els extorns enllaçats a una línia de cartera no són "no identificats" encara que no tinguin baixa.
+      .is("cartera_linia_id", null)
       .or("vehicle_id.is.null,tipus.eq.extorn")
       .returns<(Omit<Fonts["rebuts"][number], "prima_total"> & { prima_total: number | string })[]>(),
+    liniesCarteraObertes(client),
+    client
+      .from("cartera_conciliacions")
+      .select("inici, prima_mare, suma_linies, quadra, created_at")
+      .order("inici", { ascending: false })
+      .limit(1)
+      .returns<{ inici: string; prima_mare: number | string | null; suma_linies: number | string; quadra: boolean; created_at: string }[]>(),
   ]);
-  for (const q of [avisos, baixes, altes, flota, senseMotiu, rebuts]) if (q.error) throw q.error;
+  for (const q of [avisos, baixes, altes, flota, senseMotiu, rebuts, carteraDarrera]) if (q.error) throw q.error;
   const num = (v: number | string | null) => (v === null ? null : Number(v));
+  const darrera = carteraDarrera.data![0];
   return {
     avisos: avisos.data!.map(({ vehicles_assegurats: v, ...a }) => ({ ...a, matricula: v.matricula, estat_vehicle: v.estat })),
     baixes: baixes.data!.map(({ vehicles_assegurats: v, ...b }) => ({
@@ -337,6 +471,15 @@ export async function llegeixFonts(client: SupabaseClient): Promise<Fonts> {
     altesEnviant: altes.data!,
     darrerFlota: flota.data![0] ?? null,
     senseMotiu: senseMotiu.data!,
+    cartera: {
+      linies: carteraLinies.map(({ cartera_conciliacions: c, ...l }) => ({
+        ...l,
+        prima_total: num(l.prima_total),
+        extorn_esperat: num(l.extorn_esperat),
+        inici: c.inici,
+      })),
+      darrera: darrera ? { ...darrera, prima_mare: num(darrera.prima_mare), suma_linies: Number(darrera.suma_linies) } : null,
+    },
   };
 }
 
